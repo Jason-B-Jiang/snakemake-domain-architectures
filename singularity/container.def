@@ -1,0 +1,26 @@
+Bootstrap: docker
+From: conda/miniconda3
+
+%environment
+    export PATH=$PATH:/opt/
+
+%post
+    # Install wget for fetching packages + some numpy dependencies
+    apt-get update --fix-missing && apt-get install -y wget && apt-get install -y libatlas-base-dev
+    
+    # Create and activate conda environment for installing OrthoFinder and HMMER
+    conda update -n base -c defaults conda
+
+    # Install OrthoFinder v2.5.4 + HMMER v3.3.2
+    conda install -c bioconda orthofinder hmmer
+
+    # Install cath-resolve-hits v0.16.10
+    cd /opt/
+    wget https://github.com/UCLOrengoGroup/cath-tools/releases/download/v0.16.10/cath-resolve-hits.ubuntu-20.04
+    mv cath-resolve-hits.ubuntu-20.04 cath-resolve-hits
+    chmod 777 ./cath-resolve-hits
+    
+    # Initialize conda for use with bash
+    # This will allow us to use packages installed in our base conda environment
+    # (i.e: orthofinder, hmmer)
+    conda init bash

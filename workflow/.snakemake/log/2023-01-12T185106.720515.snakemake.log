@@ -1,0 +1,36 @@
+Building DAG of jobs...
+Using shell: /usr/bin/bash
+Provided cores: 4
+Rules claiming more threads will be scaled down.
+Job stats:
+job                count    min threads    max threads
+---------------  -------  -------------  -------------
+all                    1              1              1
+run_orthofinder        1              1              1
+total                  2              1              1
+
+Select jobs to execute...
+
+[Thu Jan 12 18:51:07 2023]
+rule run_orthofinder:
+    input: ../data/proteomes
+    output: ../results/OrthoFinder
+    jobid: 1
+    reason: Missing output files: ../results/OrthoFinder
+    resources: tmpdir=/tmp
+
+Activating singularity image ../singularity/conda_test.sif
+[Thu Jan 12 18:51:08 2023]
+Error in rule run_orthofinder:
+    jobid: 1
+    input: ../data/proteomes
+    output: ../results/OrthoFinder
+    shell:
+        
+		orthofinder -f ../data/proteomes -og -S blast -o ../results/OrthoFinder
+		
+        (one of the commands exited with non-zero exit code; note that snakemake uses bash strict mode!)
+
+Shutting down, this might take some time.
+Exiting because a job execution failed. Look above for error message
+Complete log: .snakemake/log/2023-01-12T185106.720515.snakemake.log

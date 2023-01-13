@@ -1,0 +1,55 @@
+singularity: "../singularity/container.sif"
+
+# Global variables
+# TODO - move these to a config file
+PROTEOMES = '../data/proteomes'
+ALL_V_ALL_ALGO = 'blast'
+
+rule all:
+	input: "../results/OrthoFinder"
+
+rule run_orthofinder:
+	input: PROTEOMES
+	output: directory("../results/OrthoFinder")
+	shell:
+		"""
+		orthofinder -f {input} -og -S {ALL_V_ALL_ALGO} -o {output}
+		"""
+
+rule get_single_copy_orthogroups:
+	# From Orthogroups.tsv from OrthoFinder, filter the orthogroups to
+	# those with a single-copy ortholog in yeast and a single-copy
+	# ortholog from *any* other species
+	input: "../results/OrthoFinder"
+	output: "../results/single_copy_orthogroups.csv"
+	script: "scripts/get_single_copy_orthogroups.R"
+
+rule run_hmmscan_on_single_copy_orthogroups:
+	input: ""
+	
+rule run_cath_resolve_hits:
+	input: ""
+	
+rule align_ortholog_domain_architectures:
+	input: ""
+
+rule singularity_test:
+	# run "snakemake --cores all --use-singularity singularity_test"
+	# to ensure all required software can be called without error from
+	# the Singularity container
+	shell:
+        	"""
+        	cath-resolve-hits -h
+        	blastp -help
+        	diamond help
+        	hmmscan -h
+        	orthofinder -h
+        
+        	echo -e '\n\n'
+        	echo '#########################################################'
+        	echo '\n'
+        	echo 'Singularity container successfully deployed in Snakemake!'
+        	echo '\n'
+        	echo '#########################################################'
+        	echo -e '\n\n'
+        	"""
