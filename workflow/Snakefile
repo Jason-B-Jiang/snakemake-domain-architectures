@@ -1,16 +1,21 @@
-singularity: "../singularity/container.sif"
+# Set working directory to parent directory (i.e: main directory for this project)
+# Snakemake complains sometimes when working with files in parent directories...
+import os
+os.chdir(os.path.dirname(os.getcwd()))  # set working dir to parent dir
+print(os.getcwd())
 
 # Global variables
 # TODO - move these to a config file
-PROTEOMES = '../data/proteomes'
+singularity: "singularity/container.sif"
+PROTEOMES = 'data/proteomes'
 ALL_V_ALL_ALGO = 'blast'
 
 rule all:
-	input: "../results/OrthoFinder"
+	input: "results/OrthoFinder"
 
 rule run_orthofinder:
 	input: PROTEOMES
-	output: directory("../results/OrthoFinder")
+	output: directory("results/OrthoFinder")
 	shell:
 		"""
 		orthofinder -f {input} -og -S {ALL_V_ALL_ALGO} -o {output}
