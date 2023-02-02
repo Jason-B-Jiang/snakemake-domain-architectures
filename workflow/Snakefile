@@ -9,25 +9,29 @@ print(os.getcwd())
 singularity: "singularity/container.sif"
 PROTEOMES = 'data/proteomes'
 ALL_V_ALL_ALGO = 'blast'
+REFERENCE_SPECIES = 'E_brev'
 
 rule all:
-	input: "results/OrthoFinder"
+	input: "results/single_copy_orthogroups.csv"
 
 rule run_orthofinder:
 	input: PROTEOMES
 	output: directory("results/OrthoFinder")
 	shell:
 		"""
-		orthofinder -f {input} -og -S {ALL_V_ALL_ALGO} -o {output}
+		orthofinder -f {input} -og -S {ALL_V_ALL_ALGO} -o {output} -n OrthoFinder
 		"""
 
 rule get_single_copy_orthogroups:
 	# From Orthogroups.tsv from OrthoFinder, filter the orthogroups to
 	# those with a single-copy ortholog in yeast and a single-copy
 	# ortholog from *any* other species
-	input: "../results/OrthoFinder"
-	output: "../results/single_copy_orthogroups.csv"
-	script: "scripts/get_single_copy_orthogroups.R"
+	input: "results/OrthoFinder"
+	output: "results/single_copy_orthogroups.csv", "resources/orthogroups_for_hmmscan"
+	shell:
+		"""
+		Rscript workflow/scripts/get_single_copy_orthogroups.R {input} {REFERENCE_SPECIES} {output}
+		"""
 
 rule run_hmmscan_on_single_copy_orthogroups:
 	input: ""
