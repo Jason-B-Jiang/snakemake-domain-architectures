@@ -53,6 +53,7 @@ rule singularity_test:
         	diamond help
         	hmmscan -h
         	orthofinder -h
+        	R --slave -e 'library(tidyverse)'
         
         	echo -e '\n\n'
         	echo '#########################################################'
