@@ -2,7 +2,6 @@
 # Snakemake complains sometimes when working with files in parent directories...
 import os
 os.chdir(os.path.dirname(os.getcwd()))  # set working dir to parent dir
-print(os.getcwd())
 
 # Global variables
 # TODO - move these to a config file
@@ -49,11 +48,28 @@ rule run_hmmscan_on_single_copy_orthogroups:
 		done < {input}
 		"""
 	
-rule run_cath_resolve_hits:
-	input: ""
+rule resolve_overlapping_hmmscan_hits:
+	input: "results/hmmscan/{orthogroup}"
+	output: "results/resolved_hmmscan_hits/{orthogroup}"
+	shell:
+		"""
+		mkdir -p results/resolved_hmmscan_hits
+		bash workflow/scripts/run_cath_resolve_hits.sh {input} {output}
+		"""
+		
+rule format_resolved_hits:
+	input: "results/resolved_hmmscan_hits/{orthogroup}"
+	output: "results/aligned_ortholog_domain_archs/resolved_domain_hits.csv"
+	shell:
+		"""
+		"""
 	
 rule align_ortholog_domain_architectures:
-	input: ""
+	input: "results/aligned_ortholog_domain_archs/resolved_domain_hits.csv"
+	output: "results/aligned_domain_architectures.csv"
+	shell:
+		"""
+		"""
 
 rule singularity_test:
 	# run "snakemake --cores all --use-singularity singularity_test"
