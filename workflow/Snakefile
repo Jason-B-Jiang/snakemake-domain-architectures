@@ -33,19 +33,34 @@ rule get_single_copy_orthogroups:
 		Rscript workflow/scripts/get_single_copy_orthogroups.R {input} {REFERENCE_SPECIES} {output}
 		"""
 		
-# TODO - parallelize this code
-rule run_hmmscan_on_single_copy_orthogroups:
+rule create_hmmscan_commands:
 	input: "resources/orthogroups_for_hmmscan"
+	output: "resources/hmmscan_commands"
+	shell:
+		"""
+		touch resources/tmp
+		
+		while read orthogroup; do
+			echo hmmscan -o results/hmmscan/"$orthogroup" \
+			--cut_ga {PFAM_LIB} \
+			results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences/"$orthogroup".fa >> resources/tmp
+		done < {input}
+		
+		mv resources/tmp {output}
+		"""
+		
+# note: I could've done this step without the pre-made commands file, and using
+# wildcards to create the hmmscan output for each orthogroup, but that lead
+# to Snakemake taking insanely long to build a DAG
+#
+# TODO: maybe replace input with function for finding acceptable orthogroups
+rule run_hmmscan_on_single_copy_orthogroups:
+	input: "resources/hmmscan_commands"
 	output: directory("results/hmmscan")
 	shell:
 		"""
 		mkdir {output}
-		
-		while read orthogroup; do
-			hmmscan -o results/hmmscan/"$orthogroup" \
-			--cut_ga {PFAM_LIB} \
-			results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences/"$orthogroup".fa
-		done < {input}
+		parallel < {input}
 		"""
 	
 rule resolve_overlapping_hmmscan_hits:
