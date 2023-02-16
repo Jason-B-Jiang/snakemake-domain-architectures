@@ -77,6 +77,7 @@ rule format_resolved_hits:
 	output: "results/aligned_ortholog_domain_archs/resolved_domain_hits.csv"
 	shell:
 		"""
+		touch {output}
 		"""
 	
 rule align_ortholog_domain_architectures:
@@ -98,12 +99,4 @@ rule singularity_test:
         	hmmscan -h
         	orthofinder -h
         	R --slave -e 'library(tidyverse)'
-        
-        	echo -e '\n\n'
-        	echo '#########################################################'
-        	echo '\n'
-        	echo 'Singularity container successfully deployed in Snakemake!'
-        	echo '\n'
-        	echo '#########################################################'
-        	echo -e '\n\n'
         	"""
