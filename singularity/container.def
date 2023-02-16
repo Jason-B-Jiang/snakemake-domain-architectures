@@ -6,7 +6,7 @@ From: continuumio/miniconda3
 
 %post
     # Install wget for fetching packages + some numpy dependencies
-    apt-get update --fix-missing && apt-get install -y wget && apt-get install -y libatlas-base-dev
+    apt-get update --fix-missing && apt-get install -y wget && apt-get install -y libatlas-base-dev && apt-get install -y parallel
     
     # Update base conda environment
     /opt/conda/bin/conda update -n base -c defaults conda
@@ -18,7 +18,7 @@ From: continuumio/miniconda3
     /opt/conda/bin/conda install -c r r-tidyverse
 
     # Install OrthoFinder v2.5.4 + HMMER v3.3.2
-    /opt/conda/bin/conda install -c bioconda orthofinder hmmer
+    /opt/conda/bin/conda install -c bioconda orthofinder=2.5.4 hmmer=3.3.2
 
     # Install cath-resolve-hits v0.16.10
     cd /opt/
