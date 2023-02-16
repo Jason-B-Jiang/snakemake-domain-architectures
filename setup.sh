@@ -4,13 +4,14 @@
 # needed to run snakemake workflow
 if [ ! -d "./snakemake_env" ];
 then
-    module load python/3.10
+    # uncomment and load in the appropriate python module in your cluster
+    # module load python/3.10
 
-    virtualenv --no-download snakemake_env
+    virtualenv snakemake_env
     source snakemake_env/bin/activate
 
-    pip install --no-index --upgrade pip
-    pip install snakemake
+    pip install --upgrade pip
+    pip install snakemake==7.22.0
 
     # initialize necessary folders for pipeline
     mkdir -p resources results
