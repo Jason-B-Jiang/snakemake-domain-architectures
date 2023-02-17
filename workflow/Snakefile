@@ -63,28 +63,20 @@ rule run_hmmscan_on_single_copy_orthogroups:
 		parallel < {input}
 		"""
 	
-rule resolve_overlapping_hmmscan_hits:
+rule get_domain_architectures_from_hmmscan:
 	input: "results/hmmscan/{orthogroup}"
-	output: "results/resolved_hmmscan_hits/{orthogroup}"
+	output: "results/domain_architectures/{orthogroup}"
 	shell:
 		"""
-		mkdir -p results/resolved_hmmscan_hits
-		bash workflow/scripts/run_cath_resolve_hits.sh {input} {output}
+		workflow/scripts/run_cath_resolve_hits.sh {input} {output}
 		"""
 		
-rule format_resolved_hits:
-	input: "results/resolved_hmmscan_hits/{orthogroup}"
-	output: "results/aligned_ortholog_domain_archs/resolved_domain_hits.csv"
+rule align_orthogroup_domain_architectures:
+	input: "results/domain_architectures"
+	output: "results/aligned_orthogroup_domain_architectures.csv"
 	shell:
 		"""
-		touch {output}
-		"""
-	
-rule align_ortholog_domain_architectures:
-	input: "results/aligned_ortholog_domain_archs/resolved_domain_hits.csv"
-	output: "results/aligned_domain_architectures.csv"
-	shell:
-		"""
+		Rscript workflow/scripts/align_domain_architectures.R {input} {output}
 		"""
 
 rule singularity_test:
