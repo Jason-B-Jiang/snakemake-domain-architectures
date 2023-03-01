@@ -33,9 +33,11 @@ main <- function() {
   # args <- commandArgs(trailingOnly = T)
   domain_archs_dir <- "../../results/domain_architectures"
   pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
+  orthogroups <- read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
+  ortho_to_species <- make_ortholog_to_species_hashtable(orthogroups)
   out <- '../../results/aligned_domain_architectures.csv'
   
-  merged_domain_archs <- merge_domain_archs(domain_archs_dir, pfam_clans)
+  merged_domain_archs <- merge_domain_archs(domain_archs_dir, pfam_clans, ortho_to_species)
   
   write_csv(aligned_domain_archs, out)
 }
@@ -43,32 +45,6 @@ main <- function() {
 ################################################################################
 
 ## Helper functions
-
-merge_domain_archs <- function(domain_archs_dir, pfam_clans) {
-  # ---------------------------------------------------------------------------
-  # Docstring goes here.
-  # ---------------------------------------------------------------------------
-  domain_archs_df <- data.frame(matrix(ncol = 6, nrow = 0))
-  colnames(domain_archs_df) <- c('orthogroup', 'species', 'query_id', 'match_id',
-                                 'resolved', 'match_clans')
-  
-  for (orthogroup_folder in list.files(domain_archs_dir, full.names = TRUE)) {
-    orthogroup <- basename(orthogroup_folder)
-    
-    for (crh_file in list.files(orthogroup_folder, full.names = TRUE)) {
-      crh_df <- read_delim(crh_file, delim = ' ', comment = '#',
-                           col_names = CRH_HEADER, show_col_types = F)
-      
-      if (nrow(crh_df) > 0) {
-        domain_archs_df <- rbind(domain_archs_df,
-                                 parse_crh_output(crh_df, pfam_clans, orthogroup))
-      }
-    }
-  }
-  
-  return(domain_archs_df)
-}
-
 
 make_pfam_clan_hashtable <- function(pfam_clans_file) {
   # ---------------------------------------------------------------------------
@@ -85,7 +61,53 @@ make_pfam_clan_hashtable <- function(pfam_clans_file) {
 }
 
 
-parse_crh_output <- function(crh_df, pfam_clans, orthogroup) {
+make_ortholog_to_species_hashtable <- function(orthogroups) {
+  # ---------------------------------------------------------------------------
+  # Docstring goes here.
+  # ---------------------------------------------------------------------------
+  ortho_to_species <- new.env()
+  
+  for (species in colnames(orthogroups)[2 : ncol(orthogroups)]) {
+    orthologs <-
+      unlist(flatten(lapply(orthogroups[[species]][!is.na(orthogroups[[species]])], function(x) {str_split(x, ', ')[[1]]})))
+    
+    for (ortholog in orthologs) {
+      ortho_to_species[[ortholog]] <- species
+    }
+  }
+  
+  return(ortho_to_species)
+}
+
+
+merge_domain_archs <- function(domain_archs_dir, pfam_clans, ortho_to_species) {
+  # ---------------------------------------------------------------------------
+  # Docstring goes here.
+  # ---------------------------------------------------------------------------
+  domain_archs_df <- data.frame(matrix(ncol = 6, nrow = 0))
+  colnames(domain_archs_df) <- c('orthogroup', 'species', 'query_id', 'match_id',
+                                 'resolved', 'match_clans')
+  
+  for (orthogroup_folder in list.files(domain_archs_dir, full.names = TRUE)) {
+    orthogroup <- basename(orthogroup_folder)
+    
+    for (crh_file in list.files(orthogroup_folder, full.names = TRUE)) {
+      crh_df <- read_delim(crh_file, delim = ' ', comment = '#',
+                           col_names = CRH_HEADER, show_col_types = F)
+      
+      if (nrow(crh_df) > 0) {
+        domain_archs_df <- rbind(domain_archs_df,
+                                 parse_crh_output(crh_df, pfam_clans,
+                                                  orthogroup, ortho_to_species))
+      }
+    }
+  }
+  
+  return(domain_archs_df)
+}
+
+
+parse_crh_output <- function(crh_df, pfam_clans, orthogroup, ortho_to_species) {
   # ---------------------------------------------------------------------------
   # Read in cath-resolve-hits output file for an orthogroup's ortholog domain
   # architectures + domain boundaries
@@ -97,14 +119,14 @@ parse_crh_output <- function(crh_df, pfam_clans, orthogroup) {
   return(
     crh_df %>%
       select(query_id, match_id, resolved) %>%
-      mutate(orthogroup = orthogroup,
-             species = NA) %>%
+      mutate(orthogroup = orthogroup) %>%
       group_by(query_id) %>%
       mutate(match_id = str_c(match_id, collapse = '; '),
              resolved = str_c(resolved, collapse = '; ')) %>%
       ungroup() %>%
       rowwise() %>%
-      mutate(match_clans = get_domain_clans(match_id, pfam_clans)) %>%
+      mutate(match_clans = get_domain_clans(match_id, pfam_clans),
+             species = ortho_to_species[[query_id]]) %>%
       ungroup() %>%
       group_by(query_id) %>%
       distinct(.keep_all = T)
@@ -128,4 +150,4 @@ get_domain_clans <- function(domains, pfam_clans) {
 
 ################################################################################
 
-main()
+# main()
