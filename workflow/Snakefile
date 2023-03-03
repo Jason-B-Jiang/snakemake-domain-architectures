@@ -61,13 +61,32 @@ rule run_hmmscan_on_single_copy_orthogroups:
 		mkdir {output}
 		parallel < {input}
 		"""
-	
-rule get_domain_architectures_from_hmmscan:
-	input: "results/hmmscan/{orthogroup}"
-	output: "results/domain_architectures/{orthogroup}"
+		
+rule create_cath_resolve_hits_commands:
+	input: "results/hmmscan"
+	params:
+		crh_script="workflow/scripts/run_cath_resolve_hits.sh"
+	output: "resources/cath_resolve_hits_commands"
 	shell:
 		"""
-		workflow/scripts/run_cath_resolve_hits.sh {input} {output}
+		touch resources/tmp
+		
+		for hmmscan_file in {input}/OG*; do
+			echo bash {params.crh_script} ${{hmmscan_file}} \
+				results/domain_architectures/$(basename ${{hmmscan_file}}) \
+			>> resources/tmp
+		done
+		
+		mv resources/tmp {output}
+		"""
+	
+rule get_domain_architectures_from_hmmscan:
+	# workflow/scripts/run_cath_resolve_hits.sh {input} {output}
+	input: "resources/cath_resolve_hits_commands"
+	output: directory("results/domain_architectures/")
+	shell:
+		"""
+		parallel < {input}
 		"""
 		
 rule align_orthogroup_domain_architectures:
