@@ -3,23 +3,20 @@
 import os
 os.chdir(os.path.dirname(os.getcwd()))  # set working dir to parent dir
 
-# Global variables
-# TODO - move these to a config file
 singularity: "singularity/container.sif"
-PROTEOMES = 'data/proteomes'
-ALL_V_ALL_ALGO = 'blast'
-REFERENCE_SPECIES = 'E_brev'
-PFAM_LIB = "data/pfam/Pfam-A.hmm"
+configfile: "snakemake_config.yaml"
 
 rule all:
 	input: "results/hmmscan"
 
 rule run_orthofinder:
-	input: PROTEOMES
+	input: config['proteomes']
+	params:
+		all_v_all=config['all_v_all_algo']
 	output: directory("results/OrthoFinder")
 	shell:
 		"""
-		orthofinder -f {input} -og -S {ALL_V_ALL_ALGO} -o {output} -n OrthoFinder
+		orthofinder -f {input} -og -S {params.all_v_all} -o {output} -n OrthoFinder
 		"""
 
 rule get_single_copy_orthogroups:
@@ -27,14 +24,18 @@ rule get_single_copy_orthogroups:
 	# those with a single-copy ortholog in yeast and a single-copy
 	# ortholog from *any* other species
 	input: "results/OrthoFinder"
+	params:
+		ref_species=config['reference_species']
 	output: "results/single_copy_orthogroups.csv", "resources/orthogroups_for_hmmscan"
 	shell:
 		"""
-		Rscript workflow/scripts/get_single_copy_orthogroups.R {input} {REFERENCE_SPECIES} {output}
+		Rscript workflow/scripts/get_single_copy_orthogroups.R {input} {params.ref_species} {output}
 		"""
 		
 rule create_hmmscan_commands:
 	input: "resources/orthogroups_for_hmmscan"
+	params:
+		pfam_lib=config['pfam_lib']
 	output: "resources/hmmscan_commands"
 	shell:
 		"""
@@ -42,7 +43,7 @@ rule create_hmmscan_commands:
 		
 		while read orthogroup; do
 			echo hmmscan -o results/hmmscan/"$orthogroup" \
-			--cut_ga {PFAM_LIB} \
+			--cut_ga {params.pfam_lib} \
 			results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences/"$orthogroup".fa >> resources/tmp
 		done < {input}
 		
@@ -52,8 +53,6 @@ rule create_hmmscan_commands:
 # note: I could've done this step without the pre-made commands file, and using
 # wildcards to create the hmmscan output for each orthogroup, but that lead
 # to Snakemake taking insanely long to build a DAG
-#
-# TODO: maybe replace input with function for finding acceptable orthogroups
 rule run_hmmscan_on_single_copy_orthogroups:
 	input: "resources/hmmscan_commands"
 	output: directory("results/hmmscan")
@@ -72,8 +71,8 @@ rule get_domain_architectures_from_hmmscan:
 		"""
 		
 rule align_orthogroup_domain_architectures:
-	input: "results/domain_architectures"
-	output: "results/aligned_orthogroup_domain_architectures.csv"
+	# input: "results/domain_architectures"
+	# output: "results/aligned_orthogroup_domain_architectures.csv"
 	shell:
 		"""
 		Rscript workflow/scripts/align_domain_architectures.R {input} {output}
@@ -83,6 +82,11 @@ rule singularity_test:
 	# run "snakemake --cores all --use-singularity singularity_test"
 	# to ensure all required software can be called without error from
 	# the Singularity container
+	#
+	# NOTE: you may encounter an error from the tidyverse import step,
+	# "System has not been booted with systemd as init system (PID 1)"
+	# This only affects datetime operations in R, which we aren't doing,
+	# so this is fine.
 	shell:
         	"""
         	cath-resolve-hits -h

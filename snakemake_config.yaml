@@ -1,0 +1,6 @@
+proteomes: 'data/proteomes'
+all_v_all_algo: 'blast'
+reference_species: 'E_brev'
+outgroup_species: ''
+pfam_lib: 'data/pfam/Pfam-A.hmm'
+pfam_clans: 'data/pfam/Pfam-A-clans.tsv'
