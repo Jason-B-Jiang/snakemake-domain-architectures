@@ -7,7 +7,7 @@ singularity: "singularity/container.sif"
 configfile: "snakemake_config.yaml"
 
 rule all:
-	input: "results/hmmscan"
+	input: "results/aligned_ortholog_domain_architectures.csv"
 
 rule run_orthofinder:
 	input: config['proteomes']
