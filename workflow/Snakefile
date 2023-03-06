@@ -87,6 +87,9 @@ rule get_domain_architectures_from_hmmscan:
 	shell:
 		"""
 		parallel < {input}
+		
+		# remove temporary folder of split hmmscan hits for the orthogroup
+		rm -r ./resources/tmp
 		"""
 		
 rule align_orthogroup_domain_architectures:
