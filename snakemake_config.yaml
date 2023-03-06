@@ -1,6 +1,6 @@
 proteomes: 'data/proteomes'
 all_v_all_algo: 'blast'
 reference_species: 'E_brev'
-outgroup_species: ''
+outgroup_species: ['C_eleg', 'D_disc', 'D_reri', 'D_mela', 'H_sapi', 'S_pomb']
 pfam_lib: 'data/pfam/Pfam-A.hmm'
 pfam_clans: 'data/pfam/Pfam-A-clans.tsv'
