@@ -93,11 +93,22 @@ rule get_domain_architectures_from_hmmscan:
 		"""
 		
 rule align_orthogroup_domain_architectures:
-	# input: "results/domain_architectures"
-	# output: "results/aligned_orthogroup_domain_architectures.csv"
+	input: "results/domain_architectures"
+	output: "results/aligned_ortholog_domain_architectures.csv"
+	params:
+		pfam_clans=config['pfam_clans'],
+		orthogroups='results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv',
+		ref_species=config['reference_species'],
+		outgroups=config['outgroup_species'],
 	shell:
 		"""
-		Rscript workflow/scripts/align_domain_architectures.R {input} {output}
+		Rscript workflow/scripts/align_ortholog_domain_architectures.R \
+			{input} \
+			{params.pfam_clans} \
+			{params.orthogroups} \
+			{output} \
+			{params.ref_species} \
+			{params.outgroups}
 		"""
 
 rule singularity_test:

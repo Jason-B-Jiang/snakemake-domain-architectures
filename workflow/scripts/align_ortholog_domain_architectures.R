@@ -3,42 +3,53 @@
 # Do pairwise alignment of ortholog domain architectures within orthogroups
 #
 # Jason Jiang - Created: Feb/28/2023
-#               Last edited: Feb/28/2023
+#               Last edited: Mar/06/2023
 #
 # Reinke Lab - Microsporidia orthologs
 #
 # -----------------------------------------------------------------------------
 
 library(tidyverse)
-library(NameNeedle)
+# library(NameNeedle)
 
 ################################################################################
 
 ## Constants
 
 # Column names for cath-resolve-hits output files
-CRH_HEADER = c('query_id', 'match_id', 'score', 'boundaries', 'resolved',
+CRH_HEADER = c('ortholog', 'domain_arch', 'score', 'boundaries', 'domain_bounds',
                'cond_evalue', 'indp_evalue')
 
 # Parameters for Needleman-Wunsch alignments of domain architectures
 NW_PARAMS = list(MATCH = 0, MISMATCH = -3, GAP = -10, GAPCHAR = '*')
 
-# List of abbreviated outgroup species names
-# TODO - integrate with Snakemake config file
-OUTGROUPS <- c('C_eleg', 'D_disc', 'D_reri', 'D_mela', 'H_sapi', 'S_pomb')
-
 ################################################################################
 
 main <- function() {
-  # args <- commandArgs(trailingOnly = T)
-  domain_archs_dir <- "../../results/domain_architectures"
-  pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
-  orthogroups <- read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
-  ortho_to_species <- make_ortholog_to_species_hashtable(orthogroups)
-  out <- '../../results/aligned_domain_architectures.csv'
+  args <- commandArgs(trailingOnly = T)
   
-  merged_domain_archs <- merge_domain_archs(domain_archs_dir, pfam_clans, ortho_to_species)
+  domain_archs_dir <- args[1]
+  pfam_clans <- make_pfam_clan_hashtable(args[2])
+  ortho_to_species <- make_ortholog_to_species_hashtable(read_tsv(args[3]))
+  out <- args[4]
+  reference_species <- args[5]
+  outgroups <- args[6 : length(args)]
   
+  # domain_archs_dir <- "../../results/domain_architectures"
+  # pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
+  # ortho_to_species <- make_ortholog_to_species_hashtable(
+  #   read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
+  # )
+  # out <- '../../results/aligned_domain_architectures.csv'
+  # reference_species <- 'E_brev'
+  # outgroups <- c('E_cuni')
+
+  aligned_domain_archs <- merge_domain_archs(domain_archs_dir,
+                                             pfam_clans,
+                                             ortho_to_species) %>%
+    get_pairwise_domain_archs(reference_species) %>%
+    align_domain_archs()
+
   write_csv(aligned_domain_archs, out)
 }
 
@@ -85,8 +96,8 @@ merge_domain_archs <- function(domain_archs_dir, pfam_clans, ortho_to_species) {
   # Docstring goes here.
   # ---------------------------------------------------------------------------
   domain_archs_df <- data.frame(matrix(ncol = 6, nrow = 0))
-  colnames(domain_archs_df) <- c('orthogroup', 'species', 'query_id', 'match_id',
-                                 'resolved', 'match_clans')
+  colnames(domain_archs_df) <- c('orthogroup', 'species', 'ortholog', 'domain_arch',
+                                 'dom_bounds', 'domain_arch_clans')
   
   for (orthogroup_folder in list.files(domain_archs_dir, full.names = TRUE)) {
     orthogroup <- basename(orthogroup_folder)
@@ -103,7 +114,21 @@ merge_domain_archs <- function(domain_archs_dir, pfam_clans, ortho_to_species) {
     }
   }
   
-  return(domain_archs_df)
+  # arrange columns in desired order before returning dataframe, and filter out
+  # orthologs in orthogroups that are not single-copy
+  return(
+    domain_archs_df %>%
+      group_by(orthogroup, species) %>%
+      # filter out non single-copy orthologs from orthogroups
+      mutate(n = n()) %>%
+      filter(n < 2) %>%
+      ungroup() %>%
+      # filter out orthogroups with domain assignments for one ortholog
+      group_by(orthogroup) %>%
+      filter(n() > 1) %>%
+      select(orthogroup, species, ortholog, domain_arch, domain_arch_clans,
+             domain_bounds)
+  )
 }
 
 
@@ -118,17 +143,17 @@ parse_crh_output <- function(crh_df, pfam_clans, orthogroup, ortho_to_species) {
   # ---------------------------------------------------------------------------
   return(
     crh_df %>%
-      select(query_id, match_id, resolved) %>%
+      select(ortholog, domain_arch, domain_bounds) %>%
       mutate(orthogroup = orthogroup) %>%
-      group_by(query_id) %>%
-      mutate(match_id = str_c(match_id, collapse = '; '),
-             resolved = str_c(resolved, collapse = '; ')) %>%
+      group_by(ortholog) %>%
+      mutate(domain_arch = str_c(domain_arch, collapse = '; '),
+             domain_bounds = str_c(domain_bounds, collapse = '; ')) %>%
       ungroup() %>%
       rowwise() %>%
-      mutate(match_clans = get_domain_clans(match_id, pfam_clans),
-             species = ortho_to_species[[query_id]]) %>%
+      mutate(domain_arch_clans = get_domain_clans(domain_arch, pfam_clans),
+             species = ortho_to_species[[ortholog]]) %>%
       ungroup() %>%
-      group_by(query_id) %>%
+      group_by(ortholog) %>%
       distinct(.keep_all = T)
   )
 }
@@ -148,6 +173,39 @@ get_domain_clans <- function(domains, pfam_clans) {
     collapse = '; '))
 }
 
+
+get_pairwise_domain_archs <- function(merged_domain_archs, reference_species) {
+  # ---------------------------------------------------------------------------
+  # Docstring goes here
+  # ---------------------------------------------------------------------------
+  # domain architectures for non-reference species
+  non_ref <- merged_domain_archs %>%
+    filter(species != reference_species)
+  
+  # domain architectures for reference species
+  ref <- merged_domain_archs %>%
+    filter(species == reference_species) %>%
+    rename(ref_species = species,
+           ref_ortholog = ortholog,
+           ref_domain_arch = domain_arch,
+           ref_domain_arch_clans = domain_arch_clans,
+           ref_domain_bounds = domain_bounds)
+  
+  # do a full join between the non-reference and reference species domain
+  # architecture dataframes, to get pairs of reference + non-reference species
+  # orthologs
+  #
+  # NOTE: we are guaranteed to have a single-copy ortholog from the reference
+  # species in each orthogroup, so this will be a many-to-one join
+  return(full_join(non_ref, ref, by = 'orthogroup'))
+}
+
+
+align_domain_archs <- function(df) {
+  # placeholder function
+  return(df)
+}
+
 ################################################################################
 
-# main()
+main()
