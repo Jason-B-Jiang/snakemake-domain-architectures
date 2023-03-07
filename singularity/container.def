@@ -16,6 +16,18 @@ From: continuumio/miniconda3
     
     # Install necessary R packages
     /opt/conda/bin/conda install -c r r-tidyverse
+    /opt/conda/bin/conda install -c r r-cluster
+    /opt/conda/bin/conda install -c conda-forge r-rtsne
+    /opt/conda/bin/conda install -c conda-forge r-readxl
+    /opt/conda/bin/conda install -c bioconda r-ggdendro
+    /opt/conda/bin/conda install -c conda-forge r-ggbeeswarm
+    /opt/conda/bin/conda install -c bioconda r-ggsignif
+    /opt/conda/bin/conda install -c bioconda r-seqinr
+    /opt/conda/bin/conda install -c bioconda bioconductor-biostrings
+    /opt/conda/bin/conda install -c conda-forge r-svglite
+    
+    # Install NameNeedles package separately, as not included with Anaconda
+    R --slave -e 'install.packages("NameNeedle", "/opt/conda/lib/R/library")'
 
     # Install OrthoFinder v2.5.4 + HMMER v3.3.2
     /opt/conda/bin/conda install -c bioconda orthofinder=2.5.4 hmmer=3.3.2
