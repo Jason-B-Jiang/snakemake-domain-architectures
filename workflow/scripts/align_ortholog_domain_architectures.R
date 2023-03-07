@@ -50,6 +50,7 @@ main <- function() {
                                              pfam_clans,
                                              ortho_to_species) %>%
     get_pairwise_domain_archs(reference_species) %>%
+    rowwise() %>%
     mutate(aligned_domain_archs = align_domain_archs(domain_arch_clans,
                                                      ref_domain_arch_clans),
            lost_doms = NA,
@@ -272,13 +273,33 @@ align_domain_archs <- function(DA_1, DA_2) {
 }
 
 
-format_alignment_str <- function(aligned_DA, DA) {
-  return(NA)
+get_clan_letters <- function(clans) {
+  # ---------------------------------------------------------------------------
+  # Get unique letter mappings for a vector of clans
+  # ---------------------------------------------------------------------------
+  clans_to_letters <- lapply(as.list(1 : length(clans)), function(i) {LETTERS[i]})
+  names(clans_to_letters) <- clans
+  
+  return(clans_to_letters)
 }
 
 
-get_clan_letters <- function(clans) {
-  return()
+format_alignment_str <- function(aligned_DA, DA) {
+  # ---------------------------------------------------------------------------
+  # Replace letters from a Needleman-Wunsch domain architecture alignment with
+  # the Pfam clans from the original domain architecture.
+  # ---------------------------------------------------------------------------
+  aligned_DA <- str_split(aligned_DA, '')[[1]]
+  
+  i = 1
+  for (j in 1 : length(aligned_DA)) {
+    if (aligned_DA[j] != '*') {
+      aligned_DA[j] <- DA[i]
+      i <- i + 1
+    }
+  }
+  
+  return(str_c(aligned_DA, collapse = ' -> '))
 }
 
 ################################################################################
