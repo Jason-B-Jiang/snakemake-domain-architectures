@@ -28,23 +28,23 @@ NW_PARAMS = list(MATCH = 0, MISMATCH = -3, GAP = -10, GAPCHAR = '*')
 main <- function() {
   args <- commandArgs(trailingOnly = T)
   
-  # domain_archs_dir <- args[1]
-  # pfam_clans <- make_pfam_clan_hashtable(args[2])
-  # ortho_to_species <- make_ortholog_to_species_hashtable(
-  #   read_tsv(args[3], show_col_types = FALSE)
-  #   )
-  # out <- args[4]
-  # reference_species <- args[5]
-  # outgroups <- args[6 : length(args)]
-  
-  domain_archs_dir <- "../../results/domain_architectures"
-  pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
+  domain_archs_dir <- args[1]
+  pfam_clans <- make_pfam_clan_hashtable(args[2])
   ortho_to_species <- make_ortholog_to_species_hashtable(
-    read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
-  )
-  out <- '../../results/aligned_domain_architectures.csv'
-  reference_species <- 'E_brev'
-  outgroups <- c('E_cuni')
+    read_tsv(args[3], show_col_types = FALSE)
+    )
+  out <- args[4]
+  reference_species <- args[5]
+  outgroups <- args[6 : length(args)]
+  
+  # domain_archs_dir <- "../../results/domain_architectures"
+  # pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
+  # ortho_to_species <- make_ortholog_to_species_hashtable(
+  #   read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
+  # )
+  # out <- '../../results/aligned_domain_architectures.csv'
+  # reference_species <- 'E_brev'
+  # outgroups <- c('E_cuni')
 
   aligned_domain_archs <- merge_domain_archs(domain_archs_dir,
                                              pfam_clans,
@@ -53,9 +53,9 @@ main <- function() {
     rowwise() %>%
     mutate(aligned_domain_archs = align_domain_archs(domain_arch_clans,
                                                      ref_domain_arch_clans),
-           lost_doms = NA,
-           swapped_doms = NA,
-           gained_doms = NA)
+           lost_doms = get_domain_architecture_diffs(aligned_domain_archs)[['loss']],
+           gained_doms = get_domain_architecture_diffs(aligned_domain_archs)[['gain']],
+           swapped_doms = get_domain_architecture_diffs(aligned_domain_archs)[['swap']])
   
   write_csv(aligned_domain_archs, out)
 }
@@ -300,6 +300,40 @@ format_alignment_str <- function(aligned_DA, DA) {
   }
   
   return(str_c(aligned_DA, collapse = ' -> '))
+}
+
+
+get_domain_architecture_diffs <- function(aligned_domain_archs) {
+  # ---------------------------------------------------------------------------
+  # Get domain architectural changes (loss, gain, swap) in an ortholog relative
+  # to a reference ortholog.
+  #
+  # Return the losses (loss, gain, swap) as a named list of vectors.
+  # ---------------------------------------------------------------------------
+  aligned_domain_archs <- str_split(aligned_domain_archs, '; ')[[1]]
+  domain_arch <- str_split(aligned_domain_archs[1], ' -> ')[[1]]
+  ref_domain_arch <- str_split(aligned_domain_archs[2], ' -> ')[[1]]
+  
+  loss <- which(domain_arch == '*')
+  gain <- which(ref_domain_arch == '*')
+  swap <- which(domain_arch != '*' & ref_domain_arch != '*' & domain_arch != ref_domain_arch)
+  
+  # replace indices of lost/swapped/gained domains with the actual domains
+  loss <- ifelse(length(loss) > 0,
+                 str_c(ref_domain_arch[loss], collapse = '; '),
+                 NA)
+  
+  gain <- ifelse(length(gain) > 0,
+                 str_c(domain_arch[gain], collapse = '; '),
+                 NA)
+  
+  swap <- ifelse(length(swap) > 0,
+                 str_c(mapply(function(x, y) {str_c(x, y, sep = ' ~> ')},
+                        ref_domain_arch[swap],
+                        domain_arch[swap]), sep = '; '),
+                 NA)
+  
+  return(list('loss' = loss, 'gain' = gain, 'swap' = swap))
 }
 
 ################################################################################
