@@ -3,7 +3,7 @@
 import os
 os.chdir(os.path.dirname(os.getcwd()))  # set working dir to parent dir
 
-singularity: "singularity/container_2.sif"
+singularity: "singularity/container.sif"
 configfile: "snakemake_config.yaml"
 
 rule all:
@@ -101,24 +101,23 @@ rule create_ortholog_length_hashmap:
 	shell: "Rscript workflow/scripts/make_ortholog_lengths_hash.R {input} {output}"
 		
 rule align_orthogroup_domain_architectures:
-	input: "results/domain_architectures"
+	input: "results/domain_architectures", "resources/ortholog_lengths.rds"
 	output: "results/aligned_ortholog_domain_architectures.csv"
 	params:
 		pfam_clans=config['pfam_clans'],
 		orthogroups='results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv',
 		ref_species=config['reference_species'],
-		outgroups=config['outgroup_species'],
-		ortholog_lengths="resources/ortholog_lengths.rds"
+		outgroups=config['outgroup_species']
 	shell:
 		"""
 		Rscript workflow/scripts/align_ortholog_domain_architectures.R \
-			{input} \
+			{input[0]} \
 			{params.pfam_clans} \
 			{params.orthogroups} \
 			{output} \
 			{params.ref_species} \
-			{params.outgroups} \
-			{params.ortholog_lengths}
+			{input[1]} \
+			{params.outgroups}
 		"""
 
 rule singularity_test:

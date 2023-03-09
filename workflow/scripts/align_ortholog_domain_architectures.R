@@ -3,14 +3,14 @@
 # Do pairwise alignment of ortholog domain architectures within orthogroups
 #
 # Jason Jiang - Created: Feb/28/2023
-#               Last edited: Mar/07/2023
+#               Last edited: Mar/09/2023
 #
 # Reinke Lab - Microsporidia orthologs
 #
 # -----------------------------------------------------------------------------
 
-library(tidyverse)
-library(NameNeedle)
+suppressMessages(library(tidyverse))
+suppressMessages(library(NameNeedle))
 
 ################################################################################
 
@@ -26,6 +26,8 @@ NW_PARAMS = list(MATCH = 0, MISMATCH = -3, GAP = -10, GAPCHAR = '*')
 ################################################################################
 
 main <- function() {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
   args <- commandArgs(trailingOnly = T)
   
   domain_archs_dir <- args[1]
@@ -35,16 +37,8 @@ main <- function() {
     )
   out <- args[4]
   reference_species <- args[5]
+  ortho_lengths <- read_rds(args[6])
   outgroups <- args[6 : length(args)]
-  
-  # domain_archs_dir <- "../../results/domain_architectures"
-  # pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
-  # ortho_to_species <- make_ortholog_to_species_hashtable(
-  #   read_tsv('../../results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv')
-  # )
-  # out <- '../../results/aligned_domain_architectures.csv'
-  # reference_species <- 'E_brev'
-  # outgroups <- c('E_cuni')
 
   aligned_domain_archs <- merge_domain_archs(domain_archs_dir,
                                              pfam_clans,
@@ -55,7 +49,11 @@ main <- function() {
                                                      ref_domain_arch_clans),
            lost_doms = get_domain_architecture_diffs(aligned_domain_archs)[['loss']],
            gained_doms = get_domain_architecture_diffs(aligned_domain_archs)[['gain']],
-           swapped_doms = get_domain_architecture_diffs(aligned_domain_archs)[['swap']])
+           swapped_doms = get_domain_architecture_diffs(aligned_domain_archs)[['swap']],
+           species_is_outgroup = species %in% outgroups) %>%
+    rowwise() %>%
+    mutate(ortholog_length = ortho_lengths[[species]][[ortholog]],
+           ref_ortholog_length = ortho_lengths[[ref_species]][[ref_ortholog]])
   
   write_csv(aligned_domain_archs, out)
 }
