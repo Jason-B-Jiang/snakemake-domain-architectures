@@ -20,7 +20,20 @@ From: continuumio/miniconda3
     				  r-tidyverse \
     				  orthofinder=2.5.4 \
     				  hmmer=3.3.2 \
-    			  -c defaults -c r -c bioconda
+    				  r-cluster \
+    				  r-tsne \
+    				  r-readxl \
+    				  r-ggdendro \
+    				  r-ggbeeswarm \
+    				  r-ggsignif \
+    				  r-seqinr \
+    				  bioconductor-biostrings \
+    				  r-svglite \
+    			  -c defaults -c r -c bioconda -c conda-forge
+    
+    # Install NameNeedle package for R separately, as not available for conda
+    /opt/conda/bin/R --slave -e \
+    	'install.packages("NameNeedle", "/opt/conda/lib/R/library", repos="http://cran.us.r-project.org")'
 
     # Install cath-resolve-hits v0.16.10
     cd /opt/
