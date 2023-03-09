@@ -3,7 +3,7 @@
 import os
 os.chdir(os.path.dirname(os.getcwd()))  # set working dir to parent dir
 
-singularity: "singularity/container.sif"
+singularity: "singularity/container_2.sif"
 configfile: "snakemake_config.yaml"
 
 rule all:
@@ -91,6 +91,14 @@ rule get_domain_architectures_from_hmmscan:
 		# remove temporary folder of split hmmscan hits for the orthogroup
 		rm -r ./resources/tmp
 		"""
+
+rule create_ortholog_length_hashmap:
+	# create an R environment mapping ortholog names to their protein
+	# lengths for each species, and save as a readable RDS file in
+	# resources folder
+	input: config['proteomes']
+	output: "resources/ortholog_lengths.rds"
+	shell: "Rscript workflow/scripts/make_ortholog_lengths_hash.R {input} {output}"
 		
 rule align_orthogroup_domain_architectures:
 	input: "results/domain_architectures"
@@ -100,6 +108,7 @@ rule align_orthogroup_domain_architectures:
 		orthogroups='results/OrthoFinder/Results_OrthoFinder/Orthogroups/Orthogroups.tsv',
 		ref_species=config['reference_species'],
 		outgroups=config['outgroup_species'],
+		ortholog_lengths="resources/ortholog_lengths.rds"
 	shell:
 		"""
 		Rscript workflow/scripts/align_ortholog_domain_architectures.R \
@@ -108,7 +117,8 @@ rule align_orthogroup_domain_architectures:
 			{params.orthogroups} \
 			{output} \
 			{params.ref_species} \
-			{params.outgroups}
+			{params.outgroups} \
+			{params.ortholog_lengths}
 		"""
 
 rule singularity_test:
