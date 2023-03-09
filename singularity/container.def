@@ -6,31 +6,21 @@ From: continuumio/miniconda3
 
 %post
     # Install wget for fetching packages + some numpy dependencies
-    apt-get update --fix-missing && apt-get install -y wget && apt-get install -y libatlas-base-dev && apt-get install -y parallel
+    apt-get update --fix-missing && \
+    apt-get install -y wget && \
+    apt-get install -y libatlas-base-dev && \
+    apt-get install -y parallel
     
     # Update base conda environment
     /opt/conda/bin/conda update -n base -c defaults conda
     
-    # Install R in base conda environment
-    /opt/conda/bin/conda install r-essentials r-base
-    
-    # Install necessary R packages
-    /opt/conda/bin/conda install -c r r-tidyverse
-    /opt/conda/bin/conda install -c r r-cluster
-    /opt/conda/bin/conda install -c conda-forge r-rtsne
-    /opt/conda/bin/conda install -c conda-forge r-readxl
-    /opt/conda/bin/conda install -c bioconda r-ggdendro
-    /opt/conda/bin/conda install -c conda-forge r-ggbeeswarm
-    /opt/conda/bin/conda install -c bioconda r-ggsignif
-    /opt/conda/bin/conda install -c bioconda r-seqinr
-    /opt/conda/bin/conda install -c bioconda bioconductor-biostrings
-    /opt/conda/bin/conda install -c conda-forge r-svglite
-    
-    # Install NameNeedles package separately, as not included with Anaconda
-    R --slave -e 'install.packages("NameNeedle", "/opt/conda/lib/R/library")'
-
-    # Install OrthoFinder v2.5.4 + HMMER v3.3.2
-    /opt/conda/bin/conda install -c bioconda orthofinder=2.5.4 hmmer=3.3.2
+    # Install R, necessary R packages, OrthoFinder v2.5.4 + HMMER v3.3.2 in base environment
+    /opt/conda/bin/conda install r-essentials \
+    				  r-base \
+    				  r-tidyverse \
+    				  orthofinder=2.5.4 \
+    				  hmmer=3.3.2 \
+    			  -c defaults -c r -c bioconda
 
     # Install cath-resolve-hits v0.16.10
     cd /opt/
