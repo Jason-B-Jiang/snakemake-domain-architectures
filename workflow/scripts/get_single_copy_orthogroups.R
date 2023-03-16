@@ -18,16 +18,20 @@ main <- function() {
   # Command line arguments:
   # $1 = filepath to directory with OrthoFinder output
   # $2 = name of reference species to find single-copy orthogroups for
-  # $3 = filepath to save single-copy orthogroups to
-  # $4 = filepath to save NAMES of single-copy orthogroups to
+  # $3 = filepath to rds of ortholog lengths in each orthogroup
+  # $4 = filepath to save single-copy orthogroups to
+  # $5 = filepath to save NAMES of single-copy orthogroups to
   #      (this will help later when choosing orthogroups to run hmmscan on)
+  # $6 - $n = names of outgroup species
   # ---------------------------------------------------------------------------
   args <- commandArgs(trailingOnly = TRUE)
   orthogroups <- read_tsv(str_c(args[1], '/Results_OrthoFinder/Orthogroups/Orthogroups.tsv'),
                           show_col_types = FALSE)
   ref_species <- args[2]
-  orthogroup_out <- args[3]
-  orthogroup_names_out <- args[4]
+  ortho_lengths <- read_rds(args[3])
+  orthogroup_out <- args[4]
+  orthogroup_names_out <- args[5]
+  outgroups <- args[6 : length(args)]
   
   rows_to_include <- c()
   
@@ -57,12 +61,47 @@ main <- function() {
   # filter to orthogroups meeting the criterion mentioned above
   orthogroups <- orthogroups[rows_to_include,]
   
+  # format orthogroups for saving as a dataframe, in which row is a single
+  # copy ortholog pair between the reference species and another species,
+  # long with the lengths for each ortholog
+  orthogroups <- format_orthogroups(orthogroups,
+                                    ref_species,
+                                    ortho_lengths,
+                                    outgroups)
+  
   # write orthogroups as csv file to specified out filepath
   write_csv(orthogroups, orthogroup_out)
   
   # write text file of orthogroups fitting this criterion to resources folder
   # (will need when picking which orthogroups to assign domains to with hmmscan)
-  write_lines(orthogroups$Orthogroup, orthogroup_names_out)
+  write_lines(unique(orthogroups$orthogroup), orthogroup_names_out)
+}
+
+################################################################################
+
+## Helper functions
+
+format_orthogroups <- function(orthogroups, ref_species, ortho_lengths, outgroups) {
+  # ----------------------------------------------------------------------------
+  # Docstring goes here.
+  # ----------------------------------------------------------------------------
+  species_orthos <- select(orthogroups, -ref_species) %>% rename(orthogroup = Orthogroup)
+  ref_orthos <- select(orthogroups, Orthogroup, ref_species) %>% rename(orthogroup = Orthogroup)
+  colnames(ref_orthos)[2] = 'ref_ortholog'
+  
+  species_orthos <- species_orthos %>%
+    pivot_longer(cols = colnames(species_orthos)[2 : ncol(species_orthos)],
+                 names_to = "species",
+                 values_to = "ortholog") %>%
+    full_join(ref_orthos, by = 'orthogroup') %>%
+    # remove entries with missing ortholog for species, or non-single copy ortholog
+    filter(!is.na(ortholog), !str_detect(ortholog, ',')) %>%
+    mutate(is_outgroup = species %in% outgroups) %>%
+    rowwise() %>%
+    mutate(ortholog_length = ortho_lengths[[orthogroup]][[ortholog]],
+           ref_ortholog_length = ortho_lengths[[orthogroup]][[ref_ortholog]])
+  
+  return(species_orthos)
 }
 
 ################################################################################

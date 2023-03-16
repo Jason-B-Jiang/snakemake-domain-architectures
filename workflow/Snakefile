@@ -18,18 +18,32 @@ rule run_orthofinder:
 		"""
 		orthofinder -f {input} -og -S {params.all_v_all} -o {output} -n OrthoFinder
 		"""
+		
+rule create_ortholog_length_hashmap:
+	# create an R environment mapping ortholog names to their protein
+	# lengths for each species, and save as a readable RDS file in
+	# resources folder
+	input: config['proteomes']
+	output: "resources/ortholog_lengths.rds"
+	shell: "Rscript workflow/scripts/make_ortholog_lengths_hash.R {input} {output}"
 
 rule get_single_copy_orthogroups:
 	# From Orthogroups.tsv from OrthoFinder, filter the orthogroups to
 	# those with a single-copy ortholog in yeast and a single-copy
 	# ortholog from *any* other species
-	input: "results/OrthoFinder"
+	input: "results/OrthoFinder", "resources/ortholog_lengths.rds"
 	params:
-		ref_species=config['reference_species']
+		ref_species=config['reference_species'],
+		outgroups=config['outgroup_species']
 	output: "results/single_copy_orthogroups.csv", "resources/orthogroups_for_hmmscan"
 	shell:
 		"""
-		Rscript workflow/scripts/get_single_copy_orthogroups.R {input} {params.ref_species} {output}
+		Rscript workflow/scripts/get_single_copy_orthogroups.R \
+			{input[0]} \
+			{params.ref_species} \
+			{input[1]} \
+			{output} \
+			{params.outgroups}
 		"""
 		
 rule create_hmmscan_commands:
@@ -91,14 +105,6 @@ rule get_domain_architectures_from_hmmscan:
 		# remove temporary folder of split hmmscan hits for the orthogroup
 		rm -r ./resources/tmp
 		"""
-
-rule create_ortholog_length_hashmap:
-	# create an R environment mapping ortholog names to their protein
-	# lengths for each species, and save as a readable RDS file in
-	# resources folder
-	input: config['proteomes']
-	output: "resources/ortholog_lengths.rds"
-	shell: "Rscript workflow/scripts/make_ortholog_lengths_hash.R {input} {output}"
 		
 rule align_orthogroup_domain_architectures:
 	input: "results/domain_architectures", "resources/ortholog_lengths.rds"
