@@ -1,9 +1,9 @@
 # -----------------------------------------------------------------------------
 #
-# Get alignment ends for local alignments between single-copy ortholog pairs
+# Get c-terminus truncation between orthologs and reference orthologs
 #
 # Jason Jiang - Created: 2023/03/16
-#               Last edited: 2023/03/16
+#               Last edited: 2023/03/17
 #
 # Reinke Lab - Microsporidia Orthologs Project
 #
@@ -31,14 +31,13 @@ main <- function() {
   #   $3 = output filepath
   # ---------------------------------------------------------------------------
   args <- commandArgs(trailingOnly = T)
-  
   orthogroup_seqs <- args[1]
-  
-  orthogroups <- read_csv(args[2], show_col_types = F) %>%
-    select(orthogroup, species, is_microsp, yeast_ortholog, species_ortholog,
-           yeast_len, species_len)
-  
+  orthogroups <- read_csv(args[2], show_col_types = F)
   out <- args[3]
+  
+  orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
+  orthogroups <- read_csv('../../results/single_copy_orthogroups.csv')
+  out <- '../../results/temp.csv'
   
   # make hashtable mapping all orthologs in orthogroups to their sequences
   orthogroup_seqs_hash <- make_orthogroup_seqs_hash(orthogroup_seqs,
@@ -49,11 +48,11 @@ main <- function() {
   orthogroups <- orthogroups %>%
     rowwise() %>%
     mutate(alignment_end = get_c_term_end(
-      orthogroup_seqs_hash[[orthogroup]][[species_ortholog]],
-      orthogroup_seqs_hash[[orthogroup]][[yeast_ortholog]],
-      is_microsp,
-      species_len,
-      yeast_len
+      orthogroup_seqs_hash[[orthogroup]][[ortholog]],
+      orthogroup_seqs_hash[[orthogroup]][[ref_ortholog]],
+      is_outgroup,
+      ortholog_length,
+      ref_ortholog_length
     ))
   
   write_csv(orthogroups, out)
@@ -62,6 +61,9 @@ main <- function() {
 ################################################################################
 
 ## Helper functions
+
+# Functions for doing local alignments between orthologs and reference orthologs,
+# and getting extent of c-terminus truncation for the ortholog
 
 make_orthogroup_seqs_hash <- function(orthogroup_seqs,
                                       orthogroups_of_interest) {
@@ -90,54 +92,33 @@ make_orthogroup_seqs_hash <- function(orthogroup_seqs,
 }
 
 
-get_c_term_end <- function(species_seq, yeast_seq, is_microsp, species_len,
-                           yeast_len) {
+get_c_term_end <- function(ortho_seq, ref_seq, is_outgroup, ortho_len,
+                           ref_len) {
   # ----------------------------------------------------------------------------
   # ----------------------------------------------------------------------------
-  if (species_len >= yeast_len) {
+  if (ortho_len >= ref_len) {
     return(NA)
   }
   
-  if (is_microsp) {
+  if (!is_outgroup) {
     MATRIX = 'BLOSUM45'
   } else {
     MATRIX = 'BLOSUM62'
   }
   
-  local_alignment <- pairwiseAlignment(species_seq, yeast_seq,
+  local_alignment <- pairwiseAlignment(ortho_seq, ref_seq,
                                        type = ALIGNMENT_TYPE,
                                        substitutionMatrix = MATRIX,
                                        gapOpening = GAP_OPEN,
                                        gapExtension = GAP_EXTEND)
   
   # return residue in species ortholog where alignment ends, indicating beginning
-  # of c-terminus truncation
+  # of c-terminus truncation in species ortholog, relative to reference ortholog
   return(end(subject(local_alignment)))
 }
+
+# Functions for classifying lost c-terminus residues in orthologs
 
 ################################################################################
 
 main()
-
-################################################################################
-
-ogs <- read_csv('single_copy_orthogroups.csv')
-ref_species <- 'E_brev'
-outgroup <- 'E_hell'
-ortho_lengths <- read_rds('../resources/ortholog_lengths.rds')
-
-species_orthos <- select(ogs, -ref_species) %>% rename(Orthogroup = 'orthogroup')
-ref_orthos <- select(ogs, Orthogroup, ref_species) %>% rename(Orthogroup = 'orthogroup')
-colnames(ref_orthos)[2] = 'ref_ortholog'
-
-species_orthos <- species_orthos %>%
-  pivot_longer(cols = colnames(species_orthos)[2 : ncol(species_orthos)],
-               names_to = "species",
-               values_to = "ortholog") %>%
-  full_join(ref_orthos, by = 'orthogroup') %>%
-  # remove entries with missing ortholog for species, or non-single copy ortholog
-  filter(!is.na(ortholog), !str_detect(ortholog, ',')) %>%
-  mutate(is_outgroup = species %in% outgroup) %>%
-  rowwise() %>%
-  mutate(ortholog_length = ortho_lengths[[orthogroup]][[ortholog]],
-         ref_ortholog_length = ortho_lengths[[orthogroup]][[ref_ortholog]])
