@@ -9,7 +9,7 @@
 #
 # -----------------------------------------------------------------------------
 
-library(tidyverse)
+suppressMessages(library(tidyverse))
 
 ################################################################################
 
@@ -85,23 +85,31 @@ format_orthogroups <- function(orthogroups, ref_species, ortho_lengths, outgroup
   # ----------------------------------------------------------------------------
   # Docstring goes here.
   # ----------------------------------------------------------------------------
-  species_orthos <- select(orthogroups, -ref_species) %>% rename(orthogroup = Orthogroup)
-  ref_orthos <- select(orthogroups, Orthogroup, ref_species) %>% rename(orthogroup = Orthogroup)
+  species_orthos <- select(orthogroups, -ref_species) %>%
+    rename(orthogroup = Orthogroup)
+  
+  ref_orthos <- select(orthogroups, Orthogroup, ref_species) %>%
+    rename(orthogroup = Orthogroup) %>%
+    mutate(ref_species = ref_species)
+  
   colnames(ref_orthos)[2] = 'ref_ortholog'
   
-  species_orthos <- species_orthos %>%
-    pivot_longer(cols = colnames(species_orthos)[2 : ncol(species_orthos)],
-                 names_to = "species",
-                 values_to = "ortholog") %>%
-    full_join(ref_orthos, by = 'orthogroup') %>%
-    # remove entries with missing ortholog for species, or non-single copy ortholog
-    filter(!is.na(ortholog), !str_detect(ortholog, ',')) %>%
-    mutate(is_outgroup = species %in% outgroups) %>%
-    rowwise() %>%
-    mutate(ortholog_length = ortho_lengths[[orthogroup]][[ortholog]],
-           ref_ortholog_length = ortho_lengths[[orthogroup]][[ref_ortholog]])
-  
-  return(species_orthos)
+  return(
+    species_orthos %>%
+      pivot_longer(cols = colnames(species_orthos)[2 : ncol(species_orthos)],
+                   names_to = "species",
+                   values_to = "ortholog") %>%
+      full_join(ref_orthos, by = 'orthogroup') %>%
+      # remove entries with missing ortholog for species, or non-single copy ortholog
+      filter(!is.na(ortholog), !str_detect(ortholog, ',')) %>%
+      mutate(is_outgroup = species %in% outgroups) %>%
+      rowwise() %>%
+      mutate(ortholog_length = ortho_lengths[[species]][[ortholog]],
+             ref_ortholog_length = ortho_lengths[[ref_species]][[ref_ortholog]]) %>%
+      # re-order columns to look nicer
+      select(orthogroup, species, is_outgroup, ref_species, ortholog,
+             ref_ortholog, ortholog_length, ref_ortholog_length)
+  )
 }
 
 ################################################################################
