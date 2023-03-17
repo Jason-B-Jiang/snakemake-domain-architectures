@@ -13,6 +13,9 @@
 suppressMessages(library(tidyverse))
 suppressMessages(library(seqinr))
 suppressMessages(library(Biostrings))
+suppressMessages(library(readxl))
+suppressMessages(library(ggbeeswarm))
+suppressMessages(library(ggsignif))
 
 ################################################################################
 
@@ -20,6 +23,8 @@ suppressMessages(library(Biostrings))
 GAP_OPEN = 11.0
 GAP_EXTEND = 1.0
 ALIGNMENT_TYPE = 'local'
+
+CLADES_ORDER = c('Microsporidia', 'Outgroup')
 
 ################################################################################
 
@@ -37,6 +42,9 @@ main <- function() {
   
   orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
   orthogroups <- read_csv('../../results/single_copy_orthogroups.csv')
+  sgd_to_uniprot_names <- read_rds('../../resources/yeast_genome_to_uniprot.rds')
+  ptc_data <- format_ptc_data(readxl::read_xls('../../data/yeast_premature_stop_codons/supp_11.xls'),
+                              sgd_to_uniprot_names)
   out <- '../../results/temp.csv'
   
   # make hashtable mapping all orthologs in orthogroups to their sequences
@@ -55,7 +63,28 @@ main <- function() {
       ref_ortholog_length
     ))
   
-  write_csv(orthogroups, out)
+  residue_classifications <- create_residue_classification_hashmap(ptc_data)
+  
+  # filter out excluded species from orthogroups dataframe, and annotate
+  # each species with the clade they belong to
+  # also, filter orthologs for yeast protein P20484
+  # PTC data has different number of residues for protein than what we have
+  clade_hash <- list('E_hell' = 'Microsporidia', 'E_cuni' = 'Outgroup')
+  
+  orthogroups <- orthogroups %>%
+    merge(ptc_data, by.x = 'ref_ortholog', by.y = 'gene') %>%
+    filter(ref_ortholog_length == protein_length) %>%
+    rowwise() %>%
+    mutate(clade = clade_hash[[species]],
+           c_term_losses = classify_c_term_losses(alignment_end,
+                                                  ref_ortholog,
+                                                  protein_length,
+                                                  residue_classifications)) %>%
+    ungroup() %>%
+    separate(c_term_losses, sep = ',', c('essential', 'dispensible', 'ambiguous')) %>%
+    mutate(essential = as.integer(essential),
+           dispensible = as.integer(dispensible),
+           ambiguous = as.integer(ambiguous))
 }
   
 ################################################################################
@@ -118,6 +147,241 @@ get_c_term_end <- function(ortho_seq, ref_seq, is_outgroup, ortho_len,
 }
 
 # Functions for classifying lost c-terminus residues in orthologs
+
+format_ptc_data <- function(ptc_data, sgd_to_uniprot_names) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  return(
+    ptc_data %>%
+      select(gene = Gene, protein_length = CDS_length,
+             dist_from_cds_end = dist_from_CDS_end,
+             ptc_tolerance = `HMM PTC classification`) %>%
+      filter(!is.na(ptc_tolerance)) %>%
+      mutate(ptc_position = protein_length - dist_from_cds_end,
+             # original CDS_length column included stop codon in length
+             protein_length = protein_length - 1) %>%
+      group_by(gene) %>%
+      arrange(ptc_position, .by_group = T) %>%
+      mutate(ptc_tolerance = str_c(ptc_tolerance, collapse = ', '),
+             ptc_position = str_c(as.character(ptc_position), collapse = ', ')) %>%
+      select(-dist_from_cds_end) %>%
+      distinct(.keep_all = T) %>%
+      ungroup() %>%
+      mutate(critical_ptc_position = get_critical_ptc_position(ptc_tolerance,
+                                                               ptc_position),
+             first_dispensible_ptc = get_first_dispensible_ptc(ptc_tolerance,
+                                                               ptc_position),
+             first_lethal_ptc = get_first_lethal_ptc(ptc_tolerance,
+                                                     ptc_position)) %>%
+      rowwise() %>%
+      mutate(gene = sgd_to_uniprot_names[[gene]])
+  )
+}
+
+
+get_critical_ptc_position <- Vectorize(function(ptc_tolerance, ptc_position) {
+  # ---------------------------------------------------------------------------
+  # Return corresponding position of the last lethal PTC in a gene
+  # ---------------------------------------------------------------------------
+  ptc_tolerance <- str_split(ptc_tolerance, ', ')[[1]]
+  ptc_position <- str_split(ptc_position, ', ')[[1]]
+  
+  # corresponding ptc position in gene for last lethal ptc
+  critical_ptc_position <- ptc_position[tail(which(ptc_tolerance == 'D'), n = 1)]
+  
+  if (length(critical_ptc_position) == 0) {
+    # all PTCs in this gene are tolerated
+    return(NA)
+  }
+  
+  return(critical_ptc_position)
+}, vectorize.args = c('ptc_tolerance', 'ptc_position'))
+
+
+get_first_dispensible_ptc <- Vectorize(function(ptc_tolerance, ptc_position) {
+  # ---------------------------------------------------------------------------
+  # Return corresponding position of the first dispensible/tolerated PTC in a
+  # gene.
+  # ---------------------------------------------------------------------------
+  if (!str_detect(ptc_tolerance, 'A')) {  # no dispensible PTCs
+    return(NA)
+  }
+  
+  ptc_tolerance <- str_split(ptc_tolerance, ', ')[[1]]
+  ptc_position <- str_split(ptc_position, ', ')[[1]]
+  
+  return(ptc_position[head(which(ptc_tolerance == 'A'), n = 1)])
+}, vectorize.args = c('ptc_tolerance', 'ptc_position'))
+
+
+get_first_lethal_ptc <- Vectorize(function(ptc_tolerance, ptc_position) {
+  # ---------------------------------------------------------------------------
+  # Return corresponding position of the first lethal PTC in a gene.
+  # ---------------------------------------------------------------------------
+  if (!str_detect(ptc_tolerance, 'D')) {  # no lethal PTCs
+    return(NA)
+  }
+  
+  ptc_tolerance <- str_split(ptc_tolerance, ', ')[[1]]
+  ptc_position <- str_split(ptc_position, ', ')[[1]]
+  
+  return(ptc_position[head(which(ptc_tolerance == 'D'), n = 1)])
+}, vectorize.args = c('ptc_tolerance', 'ptc_position'))
+
+
+create_residue_classification_hashmap <- function(ptc_data) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  residue_classifications <- new.env()
+  
+  for (i in 1 : nrow(ptc_data)) {
+    
+    protein <- ptc_data$gene[i]
+    protein_length <- as.integer(ptc_data$protein_length[i])
+    first_lethal <- as.integer(ptc_data$first_lethal_ptc[i])
+    critical <- as.integer(ptc_data$critical_ptc_position[i])
+    first_dispensible <- as.integer(ptc_data$first_dispensible_ptc[i])
+    
+    if (!is.na(critical)) {
+      essential <- 1 : critical
+    } else {
+      essential <- c()
+    }
+    
+    if (!is.na(first_dispensible)) {
+      dispensible <- first_dispensible : protein_length
+    } else {
+      dispensible <- c()
+    }
+    
+    ambiguous <- setdiff(1 : protein_length, c(essential, dispensible))
+    
+    residues <- vector(mode = 'character', length = protein_length)
+    residues[essential] <- 'essential'
+    residues[dispensible] <- 'dispensible'
+    residues[ambiguous] <- 'ambiguous'
+    
+    residue_classifications[[protein]] <- residues
+  }
+  
+  return(residue_classifications)
+}
+
+classify_c_term_losses <- function(alignment_end, yeast_ortholog, protein_length,
+                                   residue_classifications) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  if (is.na(alignment_end)) {
+    return(NA)
+  }
+  
+  lost_residues <-
+    residue_classifications[[yeast_ortholog]][alignment_end : protein_length]
+  
+  classification_counts <- new.env()
+  classification_counts[['essential']] <- 0
+  classification_counts[['dispensible']] <- 0
+  classification_counts[['ambiguous']] <- 0
+  
+  for (res in lost_residues) {
+    classification_counts[[res]] <- classification_counts[[res]] + 1
+  }
+  
+  return(str_c(classification_counts[['essential']],
+               classification_counts[['dispensible']], 
+               classification_counts[['ambiguous']],
+               sep = ','))
+}
+
+
+get_total_dispensible_residues <- function(yeast_ortholog, residue_classifications) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  residue_classes <- residue_classifications[[yeast_ortholog]]
+  return(length(residue_classes[residue_classes == 'dispensible']))
+}
+
+
+plot_lost_residue_distributions <- function(orthogroups) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  plot_df <- orthogroups %>%
+    filter(!is.na(alignment_end)) %>%
+    pivot_longer(cols = c('essential', 'dispensible', 'ambiguous'),
+                 names_to = 'type',
+                 values_to = 'loss') %>%
+    select(clade, type, loss)
+  
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER), y = sqrt(loss),
+                             fill = factor(type, level = c('essential', 'dispensible', 'ambiguous')))) +
+    geom_boxplot() +
+    scale_fill_manual(values = c('#E74C3C', '#2ECC71', '#F7DC6F')) +
+    labs(y = "Residues lost per ortholog (sqrt)") +
+    theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(size = 14, color = 'black', angle = 45,
+                                     vjust = 1, hjust = 1),
+          axis.title.y = element_text(size = 14),
+          axis.text.y = element_text(size = 14, color = 'black'),
+          legend.title = element_blank(),
+          legend.text = element_text(size = 14))
+}
+
+
+plot_percent_dispensible_lost <- function(orthogroups, residue_classifications) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  plot_df <- orthogroups %>%
+    filter(!is.na(alignment_end)) %>%
+    rowwise() %>%
+    mutate(total_dispensible = get_total_dispensible_residues(ref_ortholog,
+                                                              residue_classifications)) %>%
+    ungroup() %>%
+    mutate(percent_dispensible_lost = dispensible / total_dispensible) %>%
+    filter(!is.na(percent_dispensible_lost))
+  
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+                             y = percent_dispensible_lost,
+                             fill = factor(clade, level = CLADES_ORDER))) +
+    geom_violin(show.legend = FALSE) +
+    stat_summary(fun = "median", fun.min = "median", fun.max= "median", size= 0.3, geom = "crossbar") +
+    labs(y = '% dispensible residues lost per truncated ortholog') +
+    theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(size = 14, color = 'black', angle = 45,
+                                     vjust = 1, hjust = 1),
+          axis.title.y = element_text(size = 14),
+          axis.text.y = element_text(size = 14, color = 'black'),
+          legend.position = 'none')
+}
+
+
+plot_percent_losing_essential <- function(orthogroups) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  plot_df <- orthogroups %>%
+    filter(!is.na(alignment_end)) %>%
+    mutate(lost_essential = essential > 0) %>%
+    group_by(species, clade) %>%
+    summarise(percent_lost_essential = sum(lost_essential) / n())
+  
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+                             y = percent_lost_essential,
+                             color = factor(clade, level = CLADES_ORDER),
+                             label = species)) +
+    geom_beeswarm(show.legend = FALSE) +
+    geom_text() +
+    geom_signif(comparisons = list(c('Canonical Microsporidia', 'Outgroups')), color = 'black') +
+    stat_summary(fun = "median", fun.min = "median", fun.max= "median", size= 0.3, geom = "crossbar") +
+    labs(y = '% of species orthologs losing essential residue(s)') +
+    theme_bw() +
+    theme(axis.title.x = element_blank(),
+          axis.text.x = element_text(size = 14, color = 'black', angle = 45,
+                                     vjust = 1, hjust = 1),
+          axis.title.y = element_text(size = 14),
+          axis.text.y = element_text(size = 14, color = 'black'),
+          legend.position = 'none')
+}
 
 ################################################################################
 

@@ -1,6 +1,6 @@
 proteomes: 'data/proteomes'
 all_v_all_algo: 'blast'
-reference_species: 'E_brev'
+reference_species: 'S_cere'
 outgroup_species: ['E_cuni']
 pfam_lib: 'data/pfam/Pfam-A.hmm'
 pfam_clans: 'data/pfam/Pfam-A-clans.tsv'
