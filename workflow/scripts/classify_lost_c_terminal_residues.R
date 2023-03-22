@@ -1,12 +1,12 @@
 # -----------------------------------------------------------------------------
 #
-# Get c-terminus truncation between orthologs and reference orthologs
+# Classify lost c-terminal resiudes in orthologs to yeast, using premature stop
+# codon fitness data
 #
 # Jason Jiang - Created: 2023/03/16
-#               Last edited: 2023/03/17
+#               Last edited: 2023/03/22
 #
 # Reinke Lab - Microsporidia Orthologs Project
-#
 #
 # -----------------------------------------------------------------------------
 
@@ -38,14 +38,23 @@ main <- function() {
   args <- commandArgs(trailingOnly = T)
   orthogroup_seqs <- args[1]
   orthogroups <- read_csv(args[2], show_col_types = F)
-  out <- args[3]
+  sgd_to_uniprot_names <- read_rds(args[3])
+  ptc_data <- format_ptc_data(args[4], sgd_to_uniprot_names)
+  out_1 <- args[5]
+  out_2 <- args[6]
+  out_3 <- args[7]
   
-  orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
-  orthogroups <- read_csv('../../results/single_copy_orthogroups.csv')
-  sgd_to_uniprot_names <- read_rds('../../resources/yeast_genome_to_uniprot.rds')
-  ptc_data <- format_ptc_data(readxl::read_xls('../../data/yeast_premature_stop_codons/supp_11.xls'),
-                              sgd_to_uniprot_names)
-  out <- '../../results/temp.csv'
+  # orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
+  # orthogroups <- read_csv('../../results/single_copy_orthogroups.csv')
+  # sgd_to_uniprot_names <- read_rds('../../data/sgd_to_uniprot_names.rds')
+  # ptc_data <- format_ptc_data(readxl::read_xls('../../data/yeast_premature_stop_codons/supp_11.xls'),
+  #                             sgd_to_uniprot_names)
+  # out_1 <- NA
+  # out_2 <- NA
+  # out_3 <- NA
+  
+  # initialize folder for saving results into
+  dir.create(dirname(out_1))
   
   # make hashtable mapping all orthologs in orthogroups to their sequences
   orthogroup_seqs_hash <- make_orthogroup_seqs_hash(orthogroup_seqs,
@@ -85,6 +94,11 @@ main <- function() {
     mutate(essential = as.integer(essential),
            dispensible = as.integer(dispensible),
            ambiguous = as.integer(ambiguous))
+  
+  # make plots
+  plot_lost_residue_distributions(orthogroups, out_1)
+  plot_percent_dispensible_lost(orthogroups, residue_classifications, out_2)
+  plot_percent_losing_essential(orthogroups, out_3)
 }
   
 ################################################################################
@@ -102,7 +116,6 @@ make_orthogroup_seqs_hash <- function(orthogroup_seqs,
   seq_fasta <- unname(sapply(orthogroups_of_interest,
                              function(og) {str_c(base_dir, '/', og, '.fa')}))
   
-  # TODO - vectorize this loop
   orthogroup_seqs_hash <- new.env()
   for (seq in seq_fasta) {
     orthogroup_seqs <- new.env()
@@ -130,6 +143,8 @@ get_c_term_end <- function(ortho_seq, ref_seq, is_outgroup, ortho_len,
   }
   
   if (!is_outgroup) {
+    # non-outgroup species (i.e: microsporidia), higher sequence divergence
+    # in orthologs to reference species (yeast)
     MATRIX = 'BLOSUM45'
   } else {
     MATRIX = 'BLOSUM62'
@@ -302,7 +317,9 @@ get_total_dispensible_residues <- function(yeast_ortholog, residue_classificatio
 }
 
 
-plot_lost_residue_distributions <- function(orthogroups) {
+# Helper functions for plotting
+
+plot_lost_residue_distributions <- function(orthogroups, out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -312,8 +329,8 @@ plot_lost_residue_distributions <- function(orthogroups) {
                  values_to = 'loss') %>%
     select(clade, type, loss)
   
-  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER), y = sqrt(loss),
-                             fill = factor(type, level = c('essential', 'dispensible', 'ambiguous')))) +
+  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER), y = sqrt(loss),
+                fill = factor(type, level = c('essential', 'dispensible', 'ambiguous')))) +
     geom_boxplot() +
     scale_fill_manual(values = c('#E74C3C', '#2ECC71', '#F7DC6F')) +
     labs(y = "Residues lost per ortholog (sqrt)") +
@@ -325,10 +342,18 @@ plot_lost_residue_distributions <- function(orthogroups) {
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.title = element_blank(),
           legend.text = element_text(size = 14))
+  
+  ggsave(filename = out,
+         plot = plt,
+         width = 6.2,
+         height = 5.7,
+         units = 'in',
+         dp = 600)
 }
 
 
-plot_percent_dispensible_lost <- function(orthogroups, residue_classifications) {
+plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
+                                          out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -340,9 +365,9 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications) 
     mutate(percent_dispensible_lost = dispensible / total_dispensible) %>%
     filter(!is.na(percent_dispensible_lost))
   
-  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
-                             y = percent_dispensible_lost,
-                             fill = factor(clade, level = CLADES_ORDER))) +
+  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+                y = percent_dispensible_lost,
+                fill = factor(clade, level = CLADES_ORDER))) +
     geom_violin(show.legend = FALSE) +
     stat_summary(fun = "median", fun.min = "median", fun.max= "median", size= 0.3, geom = "crossbar") +
     labs(y = '% dispensible residues lost per truncated ortholog') +
@@ -353,10 +378,17 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications) 
           axis.title.y = element_text(size = 14),
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.position = 'none')
+  
+  ggsave(filename = out,
+         plot = plt,
+         width = 6.2,
+         height = 5.7,
+         units = 'in',
+         dp = 600)
 }
 
 
-plot_percent_losing_essential <- function(orthogroups) {
+plot_percent_losing_essential <- function(orthogroups, out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -365,10 +397,10 @@ plot_percent_losing_essential <- function(orthogroups) {
     group_by(species, clade) %>%
     summarise(percent_lost_essential = sum(lost_essential) / n())
   
-  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
-                             y = percent_lost_essential,
-                             color = factor(clade, level = CLADES_ORDER),
-                             label = species)) +
+  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+                y = percent_lost_essential,
+                color = factor(clade, level = CLADES_ORDER),
+                label = species)) +
     geom_beeswarm(show.legend = FALSE) +
     geom_text() +
     geom_signif(comparisons = list(c('Canonical Microsporidia', 'Outgroups')), color = 'black') +
@@ -381,6 +413,13 @@ plot_percent_losing_essential <- function(orthogroups) {
           axis.title.y = element_text(size = 14),
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.position = 'none')
+  
+  ggsave(filename = out,
+         plot = plt,
+         width = 6.2,
+         height = 5.7,
+         units = 'in',
+         dp = 600)
 }
 
 ################################################################################
