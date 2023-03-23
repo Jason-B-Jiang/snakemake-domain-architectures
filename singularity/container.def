@@ -34,6 +34,11 @@ From: continuumio/miniconda3
     # Install NameNeedle package for R separately, as not available for conda
     /opt/conda/bin/R --slave -e \
     	'install.packages("NameNeedle", "/opt/conda/lib/R/library", repos="http://cran.us.r-project.org")'
+    	
+    # Also install Rtsne, since installation through conda not working for
+    # some reason
+    /opt/conda/bin/R --slave -e \
+    	'install.packages("Rtsne", "/opt/conda/lib/R/library", repos="http://cran.us.r-project.org")'
 
     # Install cath-resolve-hits v0.16.10
     cd /opt/
