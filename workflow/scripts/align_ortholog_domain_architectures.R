@@ -48,7 +48,15 @@ main <- function() {
                                                      ref_domain_arch_clans),
            lost_doms = get_domain_architecture_diffs(aligned_domain_archs)[['loss']],
            gained_doms = get_domain_architecture_diffs(aligned_domain_archs)[['gain']],
-           swapped_doms = get_domain_architecture_diffs(aligned_domain_archs)[['swap']])
+           swapped_doms = get_domain_architecture_diffs(aligned_domain_archs)[['swap']]) %>%
+    ungroup() %>%
+    mutate(domain_lengths = get_domain_lengths(domain_bounds),
+           ref_domain_lengths = get_domain_lengths(ref_domain_bounds),
+           short_enough_for_domain_loss = verify_domain_loss(lost_doms,
+                                                             aligned_domain_archs,
+                                                             domain_lengths,
+                                                             ortholog_length,
+                                                             ref_ortholog_lengt))
   
   write_csv(aligned_domain_archs, out)
 }
@@ -289,6 +297,58 @@ get_domain_architecture_diffs <- function(aligned_domain_archs) {
   
   return(list('loss' = loss, 'gain' = gain, 'swap' = swap))
 }
+
+
+get_domain_lengths <- Vectorize(function(domain_bounds) {
+  # ---------------------------------------------------------------------------
+  # Get lengths for each domain from the domain boundaries given in a
+  # cath-resolve-hits output file
+  #
+  # Returns NA if domain_bounds is NA
+  # ---------------------------------------------------------------------------
+  domain_bounds <- str_split(domain_bounds, '; ')[[1]]
+  
+  domain_lengths <- c()
+  
+  for (bound in domain_bounds) {
+    bound <- str_split(bound, ',')[[1]]
+    bound_length <- 0
+    
+    for (subbound in bound) {
+      split_ <- as.integer(str_split(subbound, '-')[[1]])
+      bound_length <- bound_length + (split_[2] - split_[1] + 1)
+    }
+    
+    domain_lengths <- c(domain_lengths, bound_length)
+  }
+  
+  return(str_c(domain_lengths, collapse = '; '))
+})
+
+
+verify_domain_loss <- Vectorize(function(lost_doms, aligned_domain_archs,
+                                         domain_lengths, ortholog_length,
+                                         ref_ortholog_length) {
+  # ---------------------------------------------------------------------------
+  # Return True if an ortholog is shorter by its reference ortholog by at least
+  # 85% of the length of all its lost domains.
+  #
+  # Return NA if the ortholog has no lost domains
+  # ---------------------------------------------------------------------------
+  if (is.na(lost_doms)) {
+    return(NA)
+  }
+  domain_lengths 
+  
+  ortholog_domain_arch <- str_split(
+    str_split(aligned_domain_archs, '; ')[[1]][1], ' -> '
+  )[[1]]
+  
+  lost_doms_idx <- which(ortholog_domain_arch == '*')
+  lost_doms_length <- sum(domain_lengths[lost_doms_idx])
+  
+  return(ref_ortholog_length - ortholog_length >= 0.85 * lost_doms_length)
+})
 
 ################################################################################
 

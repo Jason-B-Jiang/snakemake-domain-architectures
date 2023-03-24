@@ -44,14 +44,14 @@ main <- function() {
   out_2 <- args[6]
   out_3 <- args[7]
   
-  # orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
-  # orthogroups <- read_csv('../../results/single_copy_orthogroups.csv')
-  # sgd_to_uniprot_names <- read_rds('../../data/sgd_to_uniprot_names.rds')
-  # ptc_data <- format_ptc_data(readxl::read_xls('../../data/yeast_premature_stop_codons/supp_11.xls'),
-  #                             sgd_to_uniprot_names)
-  # out_1 <- NA
-  # out_2 <- NA
-  # out_3 <- NA
+  orthogroup_seqs <- 'results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
+  orthogroups <- read_csv('results/single_copy_orthogroups.csv')
+  sgd_to_uniprot_names <- read_rds('data/sgd_to_uniprot_names.rds')
+  ptc_data <- format_ptc_data(readxl::read_xls('data/yeast_premature_stop_codons/supp_11.xls'),
+                              sgd_to_uniprot_names)
+  out_1 <- NA
+  out_2 <- NA
+  out_3 <- NA
   
   # initialize folder for saving results into
   dir.create(dirname(out_1))
