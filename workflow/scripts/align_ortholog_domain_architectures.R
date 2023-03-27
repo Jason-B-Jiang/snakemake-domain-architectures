@@ -3,7 +3,7 @@
 # Do pairwise alignment of ortholog domain architectures within orthogroups
 #
 # Jason Jiang - Created: Feb/28/2023
-#               Last edited: Mar/17/2023
+#               Last edited: Mar/27/2023
 #
 # Reinke Lab - Microsporidia orthologs
 #
@@ -33,13 +33,8 @@ main <- function() {
   orthogroups <- read_csv(args[2], show_col_types = FALSE)
   pfam_clans <- make_pfam_clan_hashtable(args[3])
   out <- args[4]
+  excluded_species <- args[5 : length(args)]
   
-  # domain_archs_dir <- "../../results/domain_architectures"
-  # orthogroups <- read_csv("../../results/single_copy_orthogroups.csv",
-  #                         show_col_types = FALSE)
-  # pfam_clans <- make_pfam_clan_hashtable("../../data/pfam/Pfam-A-clans.tsv")
-  # out <- '../../results/aligned_domain_architectures.csv'
-
   aligned_domain_archs <- merge_domain_archs(domain_archs_dir,
                                              orthogroups,
                                              pfam_clans) %>%
@@ -54,9 +49,10 @@ main <- function() {
            ref_domain_lengths = get_domain_lengths(ref_domain_bounds),
            short_enough_for_domain_loss = verify_domain_loss(lost_doms,
                                                              aligned_domain_archs,
-                                                             domain_lengths,
+                                                             ref_domain_lengths,
                                                              ortholog_length,
-                                                             ref_ortholog_lengt))
+                                                             ref_ortholog_length),
+           exclude_species = species %in% excluded_species)
   
   write_csv(aligned_domain_archs, out)
 }
@@ -327,7 +323,7 @@ get_domain_lengths <- Vectorize(function(domain_bounds) {
 
 
 verify_domain_loss <- Vectorize(function(lost_doms, aligned_domain_archs,
-                                         domain_lengths, ortholog_length,
+                                         ref_domain_lengths, ortholog_length,
                                          ref_ortholog_length) {
   # ---------------------------------------------------------------------------
   # Return True if an ortholog is shorter by its reference ortholog by at least
@@ -338,17 +334,22 @@ verify_domain_loss <- Vectorize(function(lost_doms, aligned_domain_archs,
   if (is.na(lost_doms)) {
     return(NA)
   }
-  domain_lengths 
+  
+  ref_domain_lengths <- as.integer(str_split(ref_domain_lengths, ';')[[1]])
   
   ortholog_domain_arch <- str_split(
     str_split(aligned_domain_archs, '; ')[[1]][1], ' -> '
   )[[1]]
   
   lost_doms_idx <- which(ortholog_domain_arch == '*')
-  lost_doms_length <- sum(domain_lengths[lost_doms_idx])
+  lost_doms_length <- sum(ref_domain_lengths[lost_doms_idx])
   
-  return(ref_ortholog_length - ortholog_length >= 0.85 * lost_doms_length)
-})
+  return(
+    as.integer(ref_ortholog_length) - as.integer(ortholog_length) 
+      >= 0.85 * lost_doms_length
+    )
+}, vectorize.args = c('lost_doms', 'aligned_domain_archs', 'ref_domain_lengths',
+                      'ortholog_length', 'ref_ortholog_length'))
 
 ################################################################################
 
