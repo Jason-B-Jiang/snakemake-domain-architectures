@@ -24,7 +24,8 @@ GAP_OPEN = 11.0
 GAP_EXTEND = 1.0
 ALIGNMENT_TYPE = 'local'
 
-CLADES_ORDER = c('Microsporidia', 'Outgroup')
+CLADES_ORDER = c('Canonical Microsporidia', 'Metchnikovellids', 'Early Diverging Microsporidia',
+                 'Rozella', 'Outgroup')
 
 ################################################################################
 
@@ -44,8 +45,15 @@ main <- function() {
   out_2 <- args[6]
   out_3 <- args[7]
   
+  excluded_sp <- c('P_neur', 'D_roes', 'C_dike', 'N_apis', 'N_bomb', 'H_magn', 'H_tvae', 'D_muel')
+  outgroups <- c('R_allo', 'S_pomb', 'D_disc', 'C_eleg', 'H_sapi', 'D_mela', 'D_reri')
   orthogroup_seqs <- 'results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
-  orthogroups <- read_csv('results/single_copy_orthogroups.csv')
+  clades_hash <- get_clades_hash(read_csv('data/microsp_clades.csv', show_col_types = FALSE))
+  orthogroups <- read_csv('results/single_copy_orthogroups.csv') %>%
+    mutate(is_outgroup = species %in% outgroups,
+           exclude_species = species %in% excluded_sp) %>%
+    rowwise() %>%
+    mutate(clade = ifelse(is_outgroup, 'Outgroup', clades_hash[[species]]))
   sgd_to_uniprot_names <- read_rds('data/sgd_to_uniprot_names.rds')
   ptc_data <- format_ptc_data(readxl::read_xls('data/yeast_premature_stop_codons/supp_11.xls'),
                               sgd_to_uniprot_names)
@@ -78,14 +86,12 @@ main <- function() {
   # each species with the clade they belong to
   # also, filter orthologs for yeast protein P20484
   # PTC data has different number of residues for protein than what we have
-  clade_hash <- list('E_hell' = 'Microsporidia', 'E_cuni' = 'Outgroup')
   
   orthogroups <- orthogroups %>%
     merge(ptc_data, by.x = 'ref_ortholog', by.y = 'gene') %>%
     filter(ref_ortholog_length == protein_length) %>%
     rowwise() %>%
-    mutate(clade = clade_hash[[species]],
-           c_term_losses = classify_c_term_losses(alignment_end,
+    mutate(c_term_losses = classify_c_term_losses(alignment_end,
                                                   ref_ortholog,
                                                   protein_length,
                                                   residue_classifications)) %>%
@@ -108,6 +114,17 @@ main <- function() {
 # Functions for doing local alignments between orthologs and reference orthologs,
 # and getting extent of c-terminus truncation for the ortholog
 
+get_clades_hash <- function(clades_df) {
+  # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  clades_hash <- new.env()
+  for (i in 1 : nrow(clades_df)) {
+    clades_hash[[clades_df$species[i]]] = clades_df$clade_broad[i]
+  }
+  
+  return(clades_hash)
+}
+
 make_orthogroup_seqs_hash <- function(orthogroup_seqs,
                                       orthogroups_of_interest) {
   # ---------------------------------------------------------------------------
@@ -123,7 +140,12 @@ make_orthogroup_seqs_hash <- function(orthogroup_seqs,
     orthologs <- getName(fa)
     
     for (ortholog in orthologs) {
-      orthogroup_seqs[[ortholog]] <- fa[[ortholog]][1]
+      # replace any unconventional amino acids (ex: U) with their conventional
+      # equivalents (ex: U -> C)
+      orthogroup_seqs[[ortholog]] <- str_c(
+        recode(str_split(fa[[ortholog]][1], '')[[1]],
+               !!!c(X = 'A', U = 'C', O = 'K', B = 'D', Z = 'E', J = 'L')),
+        collapse = '')
     }
     
     orthogroup_seqs_hash[[basename(str_remove(seq, '\\.fa'))]] <-
@@ -323,7 +345,8 @@ plot_lost_residue_distributions <- function(orthogroups, out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
-    filter(!is.na(alignment_end)) %>%
+    filter(!is.na(alignment_end),
+           !exclude_species) %>%
     pivot_longer(cols = c('essential', 'dispensible', 'ambiguous'),
                  names_to = 'type',
                  values_to = 'loss') %>%
@@ -345,10 +368,10 @@ plot_lost_residue_distributions <- function(orthogroups, out) {
   
   ggsave(filename = out,
          plot = plt,
-         width = 6.2,
+         width = 9.0,
          height = 5.7,
          units = 'in',
-         dp = 600)
+         dpi = 600)
 }
 
 
@@ -357,7 +380,8 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
-    filter(!is.na(alignment_end)) %>%
+    filter(!is.na(alignment_end),
+           !exclude_species) %>%
     rowwise() %>%
     mutate(total_dispensible = get_total_dispensible_residues(ref_ortholog,
                                                               residue_classifications)) %>%
@@ -381,8 +405,8 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
   
   ggsave(filename = out,
          plot = plt,
-         width = 6.2,
-         height = 5.7,
+         width = 8.0,
+         height = 6.8,
          units = 'in',
          dp = 600)
 }
@@ -392,7 +416,8 @@ plot_percent_losing_essential <- function(orthogroups, out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
-    filter(!is.na(alignment_end)) %>%
+    filter(!is.na(alignment_end),
+           !exclude_species) %>%
     mutate(lost_essential = essential > 0) %>%
     group_by(species, clade) %>%
     summarise(percent_lost_essential = sum(lost_essential) / n())
@@ -402,8 +427,8 @@ plot_percent_losing_essential <- function(orthogroups, out) {
                 color = factor(clade, level = CLADES_ORDER),
                 label = species)) +
     geom_beeswarm(show.legend = FALSE) +
-    geom_text() +
-    geom_signif(comparisons = list(c('Canonical Microsporidia', 'Outgroups')), color = 'black') +
+    geom_point() +
+    geom_signif(comparisons = list(c('Canonical Microsporidia', 'Outgroup')), color = 'black') +
     stat_summary(fun = "median", fun.min = "median", fun.max= "median", size= 0.3, geom = "crossbar") +
     labs(y = '% of species orthologs losing essential residue(s)') +
     theme_bw() +
@@ -416,8 +441,8 @@ plot_percent_losing_essential <- function(orthogroups, out) {
   
   ggsave(filename = out,
          plot = plt,
-         width = 6.2,
-         height = 5.7,
+         width = 6.6,
+         height = 7.3,
          units = 'in',
          dp = 600)
 }
