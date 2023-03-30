@@ -43,10 +43,9 @@ main <- function() {
   # species_clades <- make_clades_hash(read_csv(args[2], show_col_types = F))
   # out <- args[3]
   
-  excluded_sp <- c('P_neur', 'D_roes', 'C_dike', 'N_apis', 'N_bomb', 'H_magn', 'H_tvae', 'D_muel')
-  
   aligned_domain_archs <- read_csv('../../results/aligned_ortholog_domain_architectures.csv') %>%
-    filter(!(species %in% excluded_sp))
+    filter(!exclude_species,
+           is.na(short_enough_for_domain_loss) | short_enough_for_domain_loss)
   
   species_clades <- make_clades_hash(read_csv('../../data/species_clades.csv'))
   
@@ -177,7 +176,7 @@ plot_lost_dom_tsne <- function(k_medoids_clusters, gower_dist,
   #
   # note to self: iterate from perplexity = 5 to perplexity = 12
   tsne_obj <- Rtsne(gower_dist, is_distance = T, theta = 0,
-                    perplexity = 6)
+                    perplexity = PERPLEXITY)
   
   # note to self: refer to old clustering results for ways to label data, and
   # load that in as a hashmap to color points
