@@ -27,6 +27,15 @@ ALIGNMENT_TYPE = 'local'
 CLADES_ORDER = c('Canonical Microsporidia', 'Metchnikovellids', 'Early Diverging Microsporidia',
                  'Rozella', 'Outgroup')
 
+SP_ORDER <- c('A_alge', 'A_locu', 'E_aedi', 'E_bien', 'E_brev', 'E_canc',
+              'E_cuni', 'E_hell', 'E_hepa', 'E_inte', 'E_roma', 'H_erio',
+              'N_ausu', 'N_cera', 'N_cide', 'N_disp', 'N_ferr', 'N_gran',
+              'N_homo', 'N_iron', 'N_majo', 'N_mino', 'N_okwa', 'N_pari',
+              'O_coll', 'P_epip', 'P_phil', 'S_loph', 'T_cont', 'T_homi',
+              'T_rati', 'V_corn', 'V_culi', 'A_sp.', 'M_incu', 'M_daph',
+              'P_sacc', 'R_allo', 'C_eleg', 'D_disc', 'D_mela', 'D_reri',
+              'H_sapi', 'S_pomb')
+
 ################################################################################
 
 main <- function() {
@@ -36,33 +45,18 @@ main <- function() {
   #   $2 = all single-copy ortholog pairs with yeast from orthofinder
   #   $3 = output filepath
   # ---------------------------------------------------------------------------
-  args <- commandArgs(trailingOnly = T)
-  orthogroup_seqs <- args[1]
-  orthogroups <- read_csv(args[2], show_col_types = F)
-  sgd_to_uniprot_names <- read_rds(args[3])
-  ptc_data <- format_ptc_data(args[4], sgd_to_uniprot_names)
-  out_1 <- args[5]
-  out_2 <- args[6]
-  out_3 <- args[7]
-  
   excluded_sp <- c('P_neur', 'D_roes', 'C_dike', 'N_apis', 'N_bomb', 'H_magn', 'H_tvae', 'D_muel')
   outgroups <- c('R_allo', 'S_pomb', 'D_disc', 'C_eleg', 'H_sapi', 'D_mela', 'D_reri')
-  orthogroup_seqs <- 'results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
-  clades_hash <- get_clades_hash(read_csv('data/microsp_clades.csv', show_col_types = FALSE))
-  orthogroups <- read_csv('results/single_copy_orthogroups.csv') %>%
+  orthogroup_seqs <- '../../results/OrthoFinder/Results_OrthoFinder/Orthogroup_Sequences'
+  clades_hash <- get_clades_hash(read_csv('../../data/species_clades.csv', show_col_types = FALSE))
+  orthogroups <- read_csv('../../results/single_copy_orthogroups.csv') %>%
     mutate(is_outgroup = species %in% outgroups,
            exclude_species = species %in% excluded_sp) %>%
     rowwise() %>%
     mutate(clade = ifelse(is_outgroup, 'Outgroup', clades_hash[[species]]))
-  sgd_to_uniprot_names <- read_rds('data/sgd_to_uniprot_names.rds')
-  ptc_data <- format_ptc_data(readxl::read_xls('data/yeast_premature_stop_codons/supp_11.xls'),
+  sgd_to_uniprot_names <- read_rds('../../data/sgd_to_uniprot_names.rds')
+  ptc_data <- format_ptc_data(readxl::read_xls('../../data/yeast_premature_stop_codons/supp_11.xls'),
                               sgd_to_uniprot_names)
-  out_1 <- NA
-  out_2 <- NA
-  out_3 <- NA
-  
-  # initialize folder for saving results into
-  dir.create(dirname(out_1))
   
   # make hashtable mapping all orthologs in orthogroups to their sequences
   orthogroup_seqs_hash <- make_orthogroup_seqs_hash(orthogroup_seqs,
@@ -102,9 +96,9 @@ main <- function() {
            ambiguous = as.integer(ambiguous))
   
   # make plots
-  plot_lost_residue_distributions(orthogroups, out_1)
-  plot_percent_dispensible_lost(orthogroups, residue_classifications, out_2)
-  plot_percent_losing_essential(orthogroups, out_3)
+  plot_lost_residue_distributions(orthogroups)
+  plot_percent_dispensible_lost(orthogroups, residue_classifications)
+  plot_percent_losing_essential(orthogroups)
 }
   
 ################################################################################
@@ -341,7 +335,7 @@ get_total_dispensible_residues <- function(yeast_ortholog, residue_classificatio
 
 # Helper functions for plotting
 
-plot_lost_residue_distributions <- function(orthogroups, out) {
+plot_lost_residue_distributions <- function(orthogroups) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -352,7 +346,7 @@ plot_lost_residue_distributions <- function(orthogroups, out) {
                  values_to = 'loss') %>%
     select(clade, type, loss)
   
-  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER), y = sqrt(loss),
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER), y = sqrt(loss),
                 fill = factor(type, level = c('essential', 'dispensible', 'ambiguous')))) +
     geom_boxplot() +
     scale_fill_manual(values = c('#E74C3C', '#2ECC71', '#F7DC6F')) +
@@ -364,19 +358,12 @@ plot_lost_residue_distributions <- function(orthogroups, out) {
           axis.title.y = element_text(size = 14),
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.title = element_blank(),
-          legend.text = element_text(size = 14))
-  
-  ggsave(filename = out,
-         plot = plt,
-         width = 9.0,
-         height = 5.7,
-         units = 'in',
-         dpi = 600)
+          legend.text = element_text(size = 14),
+          legend.position = 'none')
 }
 
 
-plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
-                                          out) {
+plot_percent_dispensible_lost <- function(orthogroups, residue_classifications) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -389,7 +376,7 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
     mutate(percent_dispensible_lost = dispensible / total_dispensible) %>%
     filter(!is.na(percent_dispensible_lost))
   
-  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
                 y = percent_dispensible_lost,
                 fill = factor(clade, level = CLADES_ORDER))) +
     geom_violin(show.legend = FALSE) +
@@ -402,17 +389,10 @@ plot_percent_dispensible_lost <- function(orthogroups, residue_classifications,
           axis.title.y = element_text(size = 14),
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.position = 'none')
-  
-  ggsave(filename = out,
-         plot = plt,
-         width = 8.0,
-         height = 6.8,
-         units = 'in',
-         dp = 600)
 }
 
 
-plot_percent_losing_essential <- function(orthogroups, out) {
+plot_percent_losing_essential <- function(orthogroups) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
   plot_df <- orthogroups %>%
@@ -422,7 +402,7 @@ plot_percent_losing_essential <- function(orthogroups, out) {
     group_by(species, clade) %>%
     summarise(percent_lost_essential = sum(lost_essential) / n())
   
-  plt <- ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
+  ggplot(data = plot_df, aes(x = factor(clade, level = CLADES_ORDER),
                 y = percent_lost_essential,
                 color = factor(clade, level = CLADES_ORDER),
                 label = species)) +
@@ -438,13 +418,32 @@ plot_percent_losing_essential <- function(orthogroups, out) {
           axis.title.y = element_text(size = 14),
           axis.text.y = element_text(size = 14, color = 'black'),
           legend.position = 'none')
+}
+
+plot_avg_ortholog_residue_loss_per_species <- function(orthogroups) {
+  plot_df <- orthogroups %>%
+    filter(!exclude_species) %>%
+    group_by(species) %>%
+    summarise(Essential = sum(essential, na.rm = TRUE) / n(),
+              Dispensible = sum(dispensible, na.rm = TRUE) / n(),
+              Ambiguous = sum(ambiguous, na.rm = TRUE) / n()) %>%
+    pivot_longer(cols = c('Essential', 'Dispensible', 'Ambiguous'),
+                 names_to = 'Lost residue type',
+                 values_to = 'Average loss per ortholog')
   
-  ggsave(filename = out,
-         plot = plt,
-         width = 6.6,
-         height = 7.3,
-         units = 'in',
-         dp = 600)
+  ggplot(data = plot_df, aes(x = species, y = `Average loss per ortholog`,
+                             fill = `Lost residue type`)) +
+    geom_bar(stat = 'identity') +
+    scale_fill_manual('Lost residue type',
+                      values = c('#F7DC6F', '#2ECC71', '#E74C3C')) +
+    theme_bw() +
+    scale_x_discrete(limits = SP_ORDER) +
+    theme(axis.text.y = element_text(color = 'black', size = 14),
+          axis.title.x = element_blank(),
+          axis.text.x = element_text(size = 14, color = 'black', angle = 45,
+                                     vjust = 1, hjust = 1),
+          axis.title.y = element_text(size = 18, color = 'black'),
+          legend.position = 'none')
 }
 
 ################################################################################

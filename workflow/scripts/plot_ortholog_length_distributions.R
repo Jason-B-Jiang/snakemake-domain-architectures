@@ -25,14 +25,14 @@ main <- function() {
   essential_yeast_genes <- read_lines('../../data/essential_yeast_genes.txt')
   
   length_counts <- read_csv('../../results/single_copy_orthogroups.csv') %>%
-    mutate(is_outgroup = species %in% OUTGROUPS,
-           is_outgroup = ifelse(is_outgroup, 'Outgroup', 'Microsporidia'),
+    mutate(species_is_outgroup = species %in% OUTGROUPS,
+           species_is_outgroup = ifelse(species_is_outgroup, 'Outgroup', 'Microsporidia'),
            essential = ref_ortholog %in% essential_yeast_genes,
            exclude_species = species %in% EXCLUDED_SP,
            length_ratio = ortholog_length / ref_ortholog_length,
            length_bin = get_length_bin(length_ratio)) %>%
     filter(!exclude_species) %>%
-    rename(group = is_outgroup) %>%
+    rename(group = species_is_outgroup) %>%
     group_by(group, essential, length_bin) %>%
     summarise(n = n())
   
@@ -43,14 +43,19 @@ main <- function() {
     geom_bar(position = 'dodge', stat = 'identity', color = 'black') +
     geom_text(aes(label = n), position = position_dodge(width = 0.9), vjust = -0.5) +
     labs(x = '% Length to Saccharomyces cerevisiae ortholog', y = 'Count', fill = 'Essential') +
-    scale_fill_manual(values = c('white', 'black')) + # set fill colors
+    scale_fill_manual('Ortholog essential in yeast?',
+                      values = c('#F8766D', '#619CFF')) + # set fill colors
     facet_wrap(~group, ncol = 2) + # add facet wrap by 'group'
     theme_minimal() +
     theme(
       axis.text = element_text(size = 14, color = 'black'), # set color and font size of axis text
-      axis.title = element_text(size = 18, color = 'black'), # set color and font size of axis titles
+      axis.title = element_text(size = 14, color = 'black'), # set color and font size of axis titles
       legend.text = element_text(size = 14, color = 'black'), # set color and font size of legend text
-      strip.text = element_text(size = 14, color = 'black') # set color and font size of facet wrap titles
+      strip.text = element_text(size = 14, color = 'black'), # set color and font size of facet wrap titles
+      legend.justification = 'center',
+      legend.position = 'bottom',
+      legend.title = element_text(size = 14),
+      title = element_text(color = 'black', size = 14)
     )
 }
 

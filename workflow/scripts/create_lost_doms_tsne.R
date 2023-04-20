@@ -31,18 +31,6 @@ PERPLEXITY <- 10  # perplexity value for t-SNE plots, adjust to your liking
 ################################################################################
 
 main <- function() {
-  # ---------------------------------------------------------------------------
-  # Command line arguments:
-  #   $1 = filepath to aligned ortholog domain architectures
-  #   $2 = filepath to microsporidia + outgroup species clades
-  #   $3 = hashmap mapping pfam domains back to their clans
-  #   $4 = filepath to save resulting t-SNE plot in
-  # ---------------------------------------------------------------------------
-  # args <- commandArgs(trailingOnly = T)
-  # aligned_domain_archs <- read_csv(args[1], show_col_types = F)
-  # species_clades <- make_clades_hash(read_csv(args[2], show_col_types = F))
-  # out <- args[3]
-  
   aligned_domain_archs <- read_csv('../../results/aligned_ortholog_domain_architectures.csv') %>%
     filter(!exclude_species,
            is.na(short_enough_for_domain_loss) | short_enough_for_domain_loss)
@@ -171,15 +159,11 @@ plot_lost_dom_tsne <- function(k_medoids_clusters, gower_dist,
                                out) {
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
-  # plot microsporidia species using their dissimilarities in lost clan content,
-  # using t-SNE to reduce dimensions to 2
-  #
-  # note to self: iterate from perplexity = 5 to perplexity = 12
+  # plot  species using their dissimilarities in lost clan content, using t-SNE
+  # to reduce dimensions to 2
   tsne_obj <- Rtsne(gower_dist, is_distance = T, theta = 0,
                     perplexity = PERPLEXITY)
   
-  # note to self: refer to old clustering results for ways to label data, and
-  # load that in as a hashmap to color points
   tsne_data <- tsne_obj$Y %>%
     data.frame() %>%
     setNames(c('X', 'Y')) %>%
@@ -191,9 +175,11 @@ plot_lost_dom_tsne <- function(k_medoids_clusters, gower_dist,
                           'Outgroup',
                           species_clades[[species]]))
   
-  tsne_plot <- ggplot(aes(x = X, y = Y), data = tsne_data) +
-    geom_point(aes(color = clade), size = 6) +
-    geom_text(mapping = aes(label = species)) +
+  ggplot(aes(x = X, y = Y), data = tsne_data) +
+    geom_point(aes(color = clade), size = 7) +
+    geom_text(mapping = aes(label = cluster)) +
+    geom_text(mapping = aes(label = species), vjust = -1.2, size = 3,
+              angle = 30, fontface = 'bold') +
     # uncomment this line to label each point with their species names as well
     # geom_text(mapping = aes(label = species), nudge_y = 5.5, angle = 30) +
     labs(x = 't-SNE 1', y = 't-SNE 2', title = str_c('Perplexity = ', PERPLEXITY)) +
@@ -201,11 +187,8 @@ plot_lost_dom_tsne <- function(k_medoids_clusters, gower_dist,
     theme(plot.title = element_text(size = 18, face = 'bold'),
           axis.title = element_text(size = 14, face = 'bold'),
           axis.text = element_text(size = 14, color = 'black'),
-          legend.title = element_text(size = 18, face = 'bold'),
+          legend.title = element_blank(),
           legend.text = element_text(size = 14))
-  
-  ggsave(plot = tsne_plot, filename = out, dpi = 600, units = 'in',
-         width = 12.7, height = 8.5)
 }
 
 ################################################################################

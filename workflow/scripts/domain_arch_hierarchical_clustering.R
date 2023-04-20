@@ -38,16 +38,10 @@ main <- function() {
   #
   #   $2 = filepath to save resulting tileplot image
   # ----------------------------------------------------------------------------
-  args <- commandArgs(trailingOnly = T)
-  aligned_domain_archs <- read_csv(args[1], show_col_types = F) %>%
+  aligned_domain_archs <- read_csv('../../results/aligned_ortholog_domain_architectures.csv') %>%
     filter(!exclude_species,
            is.na(short_enough_for_domain_loss) | short_enough_for_domain_loss)
-  out <- args[2]
-  
-  # aligned_domain_archs <- read_csv('../../results/aligned_ortholog_domain_architectures.csv') %>%
-  #   filter(!exclude_species,
-  #          is.na(short_enough_for_domain_loss) | short_enough_for_domain_loss)
-  # out <- '../../results/fig_4/domain_arch_clusters.png
+  out <- '../../results/fig_4/domain_arch_clusters.png'
   
   ortholog_domain_arch_conservation <-
     get_ortholog_domain_arch_conservation(aligned_domain_archs)
@@ -180,18 +174,22 @@ create_ortholog_tileplot <- function(ortholog_domain_arch_conservation) {
                                                             y = species)) +
     geom_tile(aes(fill = domain_arch_conservation)) +
     scale_fill_manual(values=c("cadetblue", "yellow", "red", "black")) +
-    scale_y_discrete(limits = rev(sp_order)) +
+    scale_y_discrete(limits = sp_order) +
     labs(x = str_c(REF_SPECIES_NAME, ' ortholog'),
          title = str_c(length(unique(ortholog_domain_arch_conservation$ref_ortholog)),
                        ' yeast genes with SCOs in ≥1 other species')) +
-    theme(axis.title.y = element_blank(),
-          axis.text.x = element_blank(),
-          axis.ticks.x = element_blank(),
-          axis.text = element_text(size = 14, color = 'black'),
-          axis.title = element_text(size = 18, color = 'black'),
-          legend.text = element_text(size = 18, color = 'black'),
+    theme(axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          axis.text.x = element_text(size = 14, color = 'black',
+                                     angle = 90, vjust = 0.2),
+          axis.title.y = element_text(size = 14, color = 'black'),
+          legend.text = element_text(size = 14, color = 'black'),
           legend.title = element_blank(),
-          plot.title = element_text(size = 18, face = 'bold'))
+          legend.justification = 'centre',
+          legend.position = 'bottom',
+          plot.title = element_text(size = 14, face = 'bold')) +
+    coord_flip()
   
   return(tileplot)
 }
